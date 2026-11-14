@@ -36,6 +36,15 @@ func (s *Service) Retry(ctx context.Context, id uuid.UUID) error {
 	const fn = "services.deliveries.Service.Retry"
 	log := s.log.With(slog.String("fn", fn))
 
+	delivery, err := s.repo.GetByID(ctx, id)
+	if err != nil {
+		return fmt.Errorf("%s: %w", fn, err)
+	}
+
+	if delivery.Status != domain.StatusFailed && delivery.Status != domain.StatusDelivered {
+		return fmt.Errorf("%s: %w", fn, domain.ErrDeliveryIsActive)
+	}
+
 	cmd := dto.UpdateDeliveryStatusCommand{
 		ID:               id,
 		Status:           domain.StatusPending,

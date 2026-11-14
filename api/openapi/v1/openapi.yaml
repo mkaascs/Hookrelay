@@ -435,12 +435,18 @@ paths:
       tags: [deliveries]
       operationId: RetryDelivery
       summary: Retry a delivery
-      description: Resets a delivery to pending and re-queues it for immediate delivery, even if the endpoint is currently inactive.
+      description: Resets a finished (delivered or failed) delivery to pending and re-queues it for immediate delivery, even if the endpoint is currently inactive. Deliveries that are still pending or in progress cannot be retried.
       responses:
         '202':
           description: Accepted
         '404':
           description: delivery not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+        '409':
+          description: delivery is still active (pending, queued or processing) and cannot be retried
           content:
             application/json:
               schema:

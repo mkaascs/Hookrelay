@@ -152,7 +152,7 @@ Errors share one shape: `{"code": "endpoint_not_found", "message": "endpoint not
 | Method | Path                            | Description                                     |
 |--------|---------------------------------|-------------------------------------------------|
 | `GET`  | `/api/v1/deliveries/{id}`       | Get a single delivery                           |
-| `POST` | `/api/v1/deliveries/{id}/retry` | Retry a delivery, even if it has already failed |
+| `POST` | `/api/v1/deliveries/{id}/retry` | Retry a `delivered` or `failed` delivery; `409` if it is still active |
 
 Pagination uses `page` (from 1, default 1) and `limit` (1–100, default 10) query parameters.
 

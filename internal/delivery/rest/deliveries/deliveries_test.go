@@ -253,6 +253,15 @@ func Test_RetryDelivery(t *testing.T) {
 			want: apiv1.RetryDelivery404JSONResponse(errDeliveryNotFound),
 		},
 		{
+			name:    "delivery is still active",
+			request: apiv1.RetryDeliveryRequestObject{Id: publicDeliveryID},
+			setupMock: func(m *MockInterface) {
+				m.EXPECT().Retry(gomock.Any(), deliveryID).
+					Return(fmt.Errorf("service: %w", domain.ErrDeliveryIsActive))
+			},
+			want: apiv1.RetryDelivery409JSONResponse(errDeliveryIsActive),
+		},
+		{
 			name:    "internal error",
 			request: apiv1.RetryDeliveryRequestObject{Id: publicDeliveryID},
 			setupMock: func(m *MockInterface) {

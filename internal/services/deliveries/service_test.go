@@ -2,6 +2,7 @@ package deliveries
 
 import (
 	"context"
+	"errors"
 	"io"
 	"log/slog"
 	"testing"
@@ -92,34 +93,55 @@ func Test_Service_GetFromEvent(t *testing.T) {
 func Test_Service_Retry(t *testing.T) {
 	id := deliveryID
 
-	t.Run("success resets the delivery to pending and notifies dispatcher", func(t *testing.T) {
-		svc, repo, notifier := newTestService(t)
+	for _, status := range []domain.DeliveryStatus{domain.StatusFailed, domain.StatusDelivered} {
+		t.Run(string(status)+" delivery is reset to pending and dispatcher is notified", func(t *testing.T) {
+			svc, repo, notifier := newTestService(t)
 
-		var got dto.UpdateDeliveryStatusCommand
-		gomock.InOrder(
-			repo.EXPECT().UpdateStatus(gomock.Any(), gomock.Any()).
-				DoAndReturn(func(_ context.Context, cmd dto.UpdateDeliveryStatusCommand) error {
-					got = cmd
-					return nil
-				}),
-			notifier.EXPECT().Notify(),
-		)
+			var got dto.UpdateDeliveryStatusCommand
+			gomock.InOrder(
+				repo.EXPECT().GetByID(gomock.Any(), id).
+					Return(&domain.Delivery{ID: id, Status: status, Attempts: 5}, nil),
+				repo.EXPECT().UpdateStatus(gomock.Any(), gomock.Any()).
+					DoAndReturn(func(_ context.Context, cmd dto.UpdateDeliveryStatusCommand) error {
+						got = cmd
+						return nil
+					}),
+				notifier.EXPECT().Notify(),
+			)
 
-		before := time.Now()
-		require.NoError(t, svc.Retry(context.Background(), id))
+			before := time.Now()
+			require.NoError(t, svc.Retry(context.Background(), id))
 
-		require.Equal(t, id, got.ID)
-		require.Equal(t, domain.StatusPending, got.Status)
-		require.Equal(t, 0, got.Attempts)
-		require.Nil(t, got.LastError)
-		require.Nil(t, got.LastResponseCode)
-		require.False(t, got.NextRetryAt.Before(before))
-	})
+			require.Equal(t, id, got.ID)
+			require.Equal(t, domain.StatusPending, got.Status)
+			require.Equal(t, 0, got.Attempts)
+			require.Nil(t, got.LastError)
+			require.Nil(t, got.LastResponseCode)
+			require.False(t, got.NextRetryAt.Before(before))
+		})
+	}
 
-	t.Run("error is wrapped and dispatcher is not notified", func(t *testing.T) {
+	for _, status := range []domain.DeliveryStatus{domain.StatusPending, domain.StatusQueued, domain.StatusProcessing} {
+		t.Run(string(status)+" delivery cannot be retried", func(t *testing.T) {
+			svc, repo, _ := newTestService(t)
+			repo.EXPECT().GetByID(gomock.Any(), id).Return(&domain.Delivery{ID: id, Status: status}, nil)
+
+			require.ErrorIs(t, svc.Retry(context.Background(), id), domain.ErrDeliveryIsActive)
+		})
+	}
+
+	t.Run("get error is wrapped and delivery is not updated", func(t *testing.T) {
 		svc, repo, _ := newTestService(t)
-		repo.EXPECT().UpdateStatus(gomock.Any(), gomock.Any()).Return(domain.ErrDeliveryNotFound)
+		repo.EXPECT().GetByID(gomock.Any(), id).Return(nil, domain.ErrDeliveryNotFound)
 
 		require.ErrorIs(t, svc.Retry(context.Background(), id), domain.ErrDeliveryNotFound)
+	})
+
+	t.Run("update error is wrapped and dispatcher is not notified", func(t *testing.T) {
+		svc, repo, _ := newTestService(t)
+		repo.EXPECT().GetByID(gomock.Any(), id).Return(&domain.Delivery{ID: id, Status: domain.StatusFailed}, nil)
+		repo.EXPECT().UpdateStatus(gomock.Any(), gomock.Any()).Return(errors.New("db down"))
+
+		require.Error(t, svc.Retry(context.Background(), id))
 	})
 }

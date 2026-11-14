@@ -10,6 +10,7 @@ import (
 var (
 	errDeliveryNotFound = apiv1.Error{Code: new("delivery_not_found"), Message: "delivery not found"}
 	errEventNotFound    = apiv1.Error{Code: new("event_not_found"), Message: "event not found"}
+	errDeliveryIsActive = apiv1.Error{Code: new("delivery_is_active"), Message: "delivery is still active and cannot be retried"}
 )
 
 func ToGetErrorResponse(err error) apiv1.GetDeliveryResponseObject {
@@ -36,6 +37,9 @@ func ToRetryErrorResponse(err error) apiv1.RetryDeliveryResponseObject {
 	switch {
 	case errors.Is(err, domain.ErrDeliveryNotFound), errors.Is(err, domain.ErrInvalidID):
 		return apiv1.RetryDelivery404JSONResponse(errDeliveryNotFound)
+
+	case errors.Is(err, domain.ErrDeliveryIsActive):
+		return apiv1.RetryDelivery409JSONResponse(errDeliveryIsActive)
 
 	default:
 		return apiv1.RetryDelivery500JSONResponse(common.InternalError())
