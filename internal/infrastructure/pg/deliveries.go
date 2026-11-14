@@ -15,61 +15,12 @@ import (
 )
 
 type Deliveries struct {
-	maxAttempts int
-	pool        *pgxpool.Pool
-	log         *slog.Logger
+	pool *pgxpool.Pool
+	log  *slog.Logger
 }
 
-func NewDeliveries(pool *pgxpool.Pool, log *slog.Logger, maxAttempts int) *Deliveries {
-	return &Deliveries{pool: pool, log: log, maxAttempts: maxAttempts}
-}
-
-func (d *Deliveries) CreateForEvent(ctx context.Context, eventID uuid.UUID, eventType string) (int, error) {
-	const fn = "infrastructure.pg.Deliveries.CreateForEvent"
-
-	rows, err := d.pool.Query(ctx, `
-		SELECT endpoint_id
-		FROM subscriptions
-		JOIN endpoints ON endpoints.id = endpoint_id
-		WHERE event_type = $1 AND endpoints.is_active`, eventType)
-
-	if err != nil {
-		return 0, fmt.Errorf("%s: %w", fn, err)
-	}
-
-	defer rows.Close()
-
-	var deliveryIDs, endpointIDs []uuid.UUID
-	for rows.Next() {
-		var endpointID uuid.UUID
-		if err := rows.Scan(&endpointID); err != nil {
-			return 0, fmt.Errorf("%s: %w", fn, err)
-		}
-
-		endpointIDs = append(endpointIDs, endpointID)
-		deliveryIDs = append(deliveryIDs, uuid.Must(uuid.NewV7()))
-	}
-
-	if err := rows.Err(); err != nil {
-		return 0, fmt.Errorf("%s: %w", fn, err)
-	}
-
-	if len(endpointIDs) == 0 {
-		return 0, nil
-	}
-
-	res, err := d.pool.Exec(ctx, `
-		INSERT INTO deliveries (id, endpoint_id, event_id, max_attempts)
-		SELECT d_id, e_id, $3, $4
-		FROM unnest($1::uuid[], $2::uuid[]) AS t(d_id, e_id)
-		ON CONFLICT (endpoint_id, event_id) DO NOTHING`,
-		deliveryIDs, endpointIDs, eventID, d.maxAttempts)
-
-	if err != nil {
-		return 0, fmt.Errorf("%s: %w", fn, err)
-	}
-
-	return int(res.RowsAffected()), nil
+func NewDeliveries(pool *pgxpool.Pool, log *slog.Logger) *Deliveries {
+	return &Deliveries{pool: pool, log: log}
 }
 
 func (d *Deliveries) ClaimPending(ctx context.Context, limit int) ([]domain.PendingDelivery, error) {

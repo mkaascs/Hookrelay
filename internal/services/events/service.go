@@ -12,12 +12,8 @@ import (
 )
 
 type EventRepo interface {
-	Add(ctx context.Context, command dto.PublishEventCommand) (*domain.Event, error)
 	GetByID(ctx context.Context, id uuid.UUID) (*domain.Event, error)
-}
-
-type DeliveryRepo interface {
-	CreateForEvent(ctx context.Context, eventID uuid.UUID, eventType string) (int, error)
+	PublishEventWithDeliveries(ctx context.Context, command dto.PublishEventCommand) (*domain.Event, int, error)
 }
 
 type Notifier interface {
@@ -27,15 +23,13 @@ type Notifier interface {
 type Service struct {
 	log          *slog.Logger
 	eventRepo    EventRepo
-	deliveryRepo DeliveryRepo
 	notifier     Notifier
 }
 
-func NewService(eventRepo EventRepo, deliveryRepo DeliveryRepo, notifier Notifier, log *slog.Logger) *Service {
+func NewService(eventRepo EventRepo, notifier Notifier, log *slog.Logger) *Service {
 	return &Service{
 		log:          log,
 		eventRepo:    eventRepo,
-		deliveryRepo: deliveryRepo,
 		notifier:     notifier,
 	}
 }
@@ -44,17 +38,10 @@ func (s *Service) Publish(ctx context.Context, command dto.PublishEventCommand) 
 	const fn = "services.events.Service.Publish"
 	log := s.log.With(slog.String("fn", fn))
 
-	event, err := s.eventRepo.Add(ctx, command)
+	event, count, err := s.eventRepo.PublishEventWithDeliveries(ctx, command)
 	if err != nil {
-		const msg = "failed to add event to repo"
+		const msg = "failed to publish event"
 		s.logError(log, msg, err)
-		return nil, 0, fmt.Errorf("%s: %s: %w", fn, msg, err)
-	}
-
-	count, err := s.deliveryRepo.CreateForEvent(ctx, event.ID, event.Type)
-	if err != nil {
-		const msg = "failed to create deliveries for event"
-		s.logError(log, msg, err, slog.String("event_id", event.ID.String()))
 		return nil, 0, fmt.Errorf("%s: %s: %w", fn, msg, err)
 	}
 

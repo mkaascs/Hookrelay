@@ -43,21 +43,6 @@ func (m *MockEventRepo) EXPECT() *MockEventRepoMockRecorder {
 	return m.recorder
 }
 
-// Add mocks base method.
-func (m *MockEventRepo) Add(ctx context.Context, command dto.PublishEventCommand) (*domain.Event, error) {
-	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "Add", ctx, command)
-	ret0, _ := ret[0].(*domain.Event)
-	ret1, _ := ret[1].(error)
-	return ret0, ret1
-}
-
-// Add indicates an expected call of Add.
-func (mr *MockEventRepoMockRecorder) Add(ctx, command any) *gomock.Call {
-	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "Add", reflect.TypeOf((*MockEventRepo)(nil).Add), ctx, command)
-}
-
 // GetByID mocks base method.
 func (m *MockEventRepo) GetByID(ctx context.Context, id uuid.UUID) (*domain.Event, error) {
 	m.ctrl.T.Helper()
@@ -73,43 +58,20 @@ func (mr *MockEventRepoMockRecorder) GetByID(ctx, id any) *gomock.Call {
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "GetByID", reflect.TypeOf((*MockEventRepo)(nil).GetByID), ctx, id)
 }
 
-// MockDeliveryRepo is a mock of DeliveryRepo interface.
-type MockDeliveryRepo struct {
-	ctrl     *gomock.Controller
-	recorder *MockDeliveryRepoMockRecorder
-	isgomock struct{}
-}
-
-// MockDeliveryRepoMockRecorder is the mock recorder for MockDeliveryRepo.
-type MockDeliveryRepoMockRecorder struct {
-	mock *MockDeliveryRepo
-}
-
-// NewMockDeliveryRepo creates a new mock instance.
-func NewMockDeliveryRepo(ctrl *gomock.Controller) *MockDeliveryRepo {
-	mock := &MockDeliveryRepo{ctrl: ctrl}
-	mock.recorder = &MockDeliveryRepoMockRecorder{mock}
-	return mock
-}
-
-// EXPECT returns an object that allows the caller to indicate expected use.
-func (m *MockDeliveryRepo) EXPECT() *MockDeliveryRepoMockRecorder {
-	return m.recorder
-}
-
-// CreateForEvent mocks base method.
-func (m *MockDeliveryRepo) CreateForEvent(ctx context.Context, eventID uuid.UUID, eventType string) (int, error) {
+// PublishEventWithDeliveries mocks base method.
+func (m *MockEventRepo) PublishEventWithDeliveries(ctx context.Context, command dto.PublishEventCommand) (*domain.Event, int, error) {
 	m.ctrl.T.Helper()
-	ret := m.ctrl.Call(m, "CreateForEvent", ctx, eventID, eventType)
-	ret0, _ := ret[0].(int)
-	ret1, _ := ret[1].(error)
-	return ret0, ret1
+	ret := m.ctrl.Call(m, "PublishEventWithDeliveries", ctx, command)
+	ret0, _ := ret[0].(*domain.Event)
+	ret1, _ := ret[1].(int)
+	ret2, _ := ret[2].(error)
+	return ret0, ret1, ret2
 }
 
-// CreateForEvent indicates an expected call of CreateForEvent.
-func (mr *MockDeliveryRepoMockRecorder) CreateForEvent(ctx, eventID, eventType any) *gomock.Call {
+// PublishEventWithDeliveries indicates an expected call of PublishEventWithDeliveries.
+func (mr *MockEventRepoMockRecorder) PublishEventWithDeliveries(ctx, command any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "CreateForEvent", reflect.TypeOf((*MockDeliveryRepo)(nil).CreateForEvent), ctx, eventID, eventType)
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "PublishEventWithDeliveries", reflect.TypeOf((*MockEventRepo)(nil).PublishEventWithDeliveries), ctx, command)
 }
 
 // MockNotifier is a mock of Notifier interface.

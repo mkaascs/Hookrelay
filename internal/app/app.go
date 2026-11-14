@@ -42,9 +42,9 @@ func New(log *slog.Logger, cfg config.Config) *App {
 	postgresApp.MustConnect()
 	postgres.MustMigrate(log, cfg.DB)
 
-	eventRepo := pgRepo.NewEvents(postgresApp.Pool, log)
+	eventRepo := pgRepo.NewEvents(postgresApp.Pool, log, cfg.MaxAttempts)
 	endpointRepo := pgRepo.NewEndpoints(postgresApp.Pool, log)
-	deliveryRepo := pgRepo.NewDeliveries(postgresApp.Pool, log, cfg.MaxAttempts)
+	deliveryRepo := pgRepo.NewDeliveries(postgresApp.Pool, log)
 	subscriptionRepo := pgRepo.NewSubscriptions(postgresApp.Pool, log)
 
 	worker := workers.NewWorkers(deliveryRepo, cfg.Workers, log)
@@ -54,7 +54,7 @@ func New(log *slog.Logger, cfg config.Config) *App {
 		Deliveries:    deliveries.NewService(deliveryRepo, dispatcher, log),
 		Endpoints:     endpoints.NewService(endpointRepo, log),
 		Subscriptions: subscriptions.NewService(subscriptionRepo, log),
-		Events:        events.NewService(eventRepo, deliveryRepo, dispatcher, log),
+		Events:        events.NewService(eventRepo, dispatcher, log),
 	})
 
 	ctx, cancel := context.WithCancel(context.Background())
