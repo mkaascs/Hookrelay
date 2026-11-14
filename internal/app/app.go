@@ -51,10 +51,10 @@ func New(log *slog.Logger, cfg config.Config) *App {
 	dispatcher := workers.NewDispatcher(worker, deliveryRepo, cfg.Dispatcher, log)
 
 	handler := rest.NewHandler(rest.Services{
-		Deliveries:    deliveries.NewService(deliveryRepo, log),
+		Deliveries:    deliveries.NewService(deliveryRepo, dispatcher, log),
 		Endpoints:     endpoints.NewService(endpointRepo, log),
 		Subscriptions: subscriptions.NewService(subscriptionRepo, log),
-		Events:        events.NewService(eventRepo, deliveryRepo, log),
+		Events:        events.NewService(eventRepo, deliveryRepo, dispatcher, log),
 	})
 
 	ctx, cancel := context.WithCancel(context.Background())
