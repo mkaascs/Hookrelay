@@ -23,7 +23,7 @@ func NewAPIAuth(log *slog.Logger) func(http.Handler) http.Handler {
 		}
 
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			log = log.With(slog.String("request_id", middleware.GetReqID(r.Context())))
+			log := log.With(slog.String("request_id", middleware.GetReqID(r.Context())))
 
 			if len(expected) == 0 {
 				next.ServeHTTP(w, r)
