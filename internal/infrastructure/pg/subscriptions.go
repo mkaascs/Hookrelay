@@ -2,14 +2,18 @@ package pg
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"log/slog"
 	"webhook-delivery/internal/domain"
 	"webhook-delivery/internal/domain/dto"
 
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
+
+const foreignKeyViolation = "23503"
 
 type Subscriptions struct {
 	pool *pgxpool.Pool
@@ -76,6 +80,15 @@ func insertSubscription(ctx context.Context, pool poolQuery, endpointID uuid.UUI
 		subs = append(subs, sub)
 	}
 
+	if err := rows.Err(); err != nil {
+		var pgErr *pgconn.PgError
+		if errors.As(err, &pgErr) && pgErr.Code == foreignKeyViolation {
+			return nil, domain.ErrEndpointNotFound
+		}
+
+		return nil, fmt.Errorf("%s: %w", fn, err)
+	}
+
 	return subs, nil
 }
 
@@ -101,6 +114,15 @@ func getEndpointSubscriptions(ctx context.Context, pool poolQuery, endpointID uu
 		}
 
 		subs = append(subs, s)
+	}
+
+	if err := rows.Err(); err != nil {
+		var pgErr *pgconn.PgError
+		if errors.As(err, &pgErr) && pgErr.Code == foreignKeyViolation {
+			return nil, domain.ErrEndpointNotFound
+		}
+
+		return nil, fmt.Errorf("%s: %w", fn, err)
 	}
 
 	return subs, nil
