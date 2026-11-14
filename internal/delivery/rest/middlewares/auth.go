@@ -18,13 +18,16 @@ func NewAPIAuth(log *slog.Logger) func(http.Handler) http.Handler {
 
 	return func(next http.Handler) http.Handler {
 		log := log.With(slog.String("component", "middleware/api_auth"))
+		if len(expected) == 0 {
+			log.Warn("env API_KEY is not provided: auth is skipped")
+		}
 
 		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			log.With(slog.String("request_id", middleware.GetReqID(r.Context())))
+			log = log.With(slog.String("request_id", middleware.GetReqID(r.Context())))
 
 			if len(expected) == 0 {
-				log.Warn("env API_KEY is not provided: auth is skipped")
 				next.ServeHTTP(w, r)
+				return
 			}
 
 			provided := r.Header.Get(apiKeyHeader)

@@ -8,6 +8,9 @@ info:
 servers:
   - url: /api/v1
 
+security:
+  - ApiKeyAuth: []
+
 tags:
   - name: endpoints
   - name: subscriptions
@@ -37,6 +40,10 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/Error'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
         '500':
           description: Internal Server Error
           content:
@@ -68,6 +75,10 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/Error'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
         '500':
           description: Internal Server Error
           content:
@@ -95,6 +106,10 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/Error'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
         '500':
           description: Internal Server Error
           content:
@@ -128,6 +143,10 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/Error'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
         '500':
           description: Internal Server Error
           content:
@@ -147,6 +166,10 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/Error'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
         '500':
           description: Internal Server Error
           content:
@@ -174,6 +197,10 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/Error'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
         '500':
           description: Internal Server Error
           content:
@@ -217,6 +244,10 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/Error'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
         '500':
           description: Internal Server Error
           content:
@@ -246,6 +277,10 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/Error'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
         '500':
           description: Internal Server Error
           content:
@@ -279,6 +314,10 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/Error'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
         '500':
           description: Internal Server Error
           content:
@@ -306,6 +345,10 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/Error'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
         '500':
           description: Internal Server Error
           content:
@@ -343,6 +386,10 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/Error'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
         '500':
           description: Internal Server Error
           content:
@@ -370,6 +417,10 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/Error'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
         '500':
           description: Internal Server Error
           content:
@@ -394,6 +445,10 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/Error'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
         '500':
           description: Internal Server Error
           content:
@@ -402,6 +457,27 @@ paths:
                 $ref: '#/components/schemas/Error'
 
 components:
+  securitySchemes:
+    ApiKeyAuth:
+      type: apiKey
+      in: header
+      name: X-Api-Key
+      description: API key from the API_KEY env variable. Auth is disabled when API_KEY is not set.
+
+  responses:
+    Unauthorized:
+      description: api key is missing
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+    Forbidden:
+      description: api key is invalid
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/Error'
+
   parameters:
     Page:
       name: page
@@ -753,7 +829,7 @@ components:
           example: ep_1a2b3c
         status:
           type: string
-          enum: [pending, processing, delivered, failed]
+          enum: [pending, queued, processing, delivered, failed]
           example: pending
         attempts:
           type: integer

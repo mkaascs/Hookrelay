@@ -29,6 +29,7 @@ const (
 	Failed     DeliveryInfoStatus = "failed"
 	Pending    DeliveryInfoStatus = "pending"
 	Processing DeliveryInfoStatus = "processing"
+	Queued     DeliveryInfoStatus = "queued"
 )
 
 // Valid indicates whether the value is a known member of the DeliveryInfoStatus enum.
@@ -41,6 +42,8 @@ func (e DeliveryInfoStatus) Valid() bool {
 	case Pending:
 		return true
 	case Processing:
+		return true
+	case Queued:
 		return true
 	default:
 		return false
@@ -318,6 +321,12 @@ type Limit = int
 
 // Page defines model for Page.
 type Page = int
+
+// Forbidden defines model for Forbidden.
+type Forbidden = Error
+
+// Unauthorized defines model for Unauthorized.
+type Unauthorized = Error
 
 // GetAllEndpointsParams defines parameters for GetAllEndpoints.
 type GetAllEndpointsParams struct {
@@ -1002,6 +1011,10 @@ func HandlerWithOptions(si ServerInterface, options ChiServerOptions) http.Handl
 	return r
 }
 
+type ForbiddenJSONResponse Error
+
+type UnauthorizedJSONResponse Error
+
 type GetDeliveryRequestObject struct {
 	Id DeliveryID `json:"id"`
 }
@@ -1020,6 +1033,34 @@ func (response GetDelivery200JSONResponse) VisitGetDeliveryResponse(w http.Respo
 	}
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type GetDelivery401JSONResponse struct{ UnauthorizedJSONResponse }
+
+func (response GetDelivery401JSONResponse) VisitGetDeliveryResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(401)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type GetDelivery403JSONResponse struct{ ForbiddenJSONResponse }
+
+func (response GetDelivery403JSONResponse) VisitGetDeliveryResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(403)
 	_, err := buf.WriteTo(w)
 	return err
 }
@@ -1066,6 +1107,34 @@ type RetryDelivery202Response struct {
 func (response RetryDelivery202Response) VisitRetryDeliveryResponse(w http.ResponseWriter) error {
 	w.WriteHeader(202)
 	return nil
+}
+
+type RetryDelivery401JSONResponse struct{ UnauthorizedJSONResponse }
+
+func (response RetryDelivery401JSONResponse) VisitRetryDeliveryResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(401)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type RetryDelivery403JSONResponse struct{ ForbiddenJSONResponse }
+
+func (response RetryDelivery403JSONResponse) VisitRetryDeliveryResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(403)
+	_, err := buf.WriteTo(w)
+	return err
 }
 
 type RetryDelivery404JSONResponse Error
@@ -1132,6 +1201,34 @@ func (response GetAllEndpoints400JSONResponse) VisitGetAllEndpointsResponse(w ht
 	return err
 }
 
+type GetAllEndpoints401JSONResponse struct{ UnauthorizedJSONResponse }
+
+func (response GetAllEndpoints401JSONResponse) VisitGetAllEndpointsResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(401)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type GetAllEndpoints403JSONResponse struct{ ForbiddenJSONResponse }
+
+func (response GetAllEndpoints403JSONResponse) VisitGetAllEndpointsResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(403)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
 type GetAllEndpoints500JSONResponse Error
 
 func (response GetAllEndpoints500JSONResponse) VisitGetAllEndpointsResponse(w http.ResponseWriter) error {
@@ -1182,6 +1279,34 @@ func (response RegisterEndpoint400JSONResponse) VisitRegisterEndpointResponse(w 
 	return err
 }
 
+type RegisterEndpoint401JSONResponse struct{ UnauthorizedJSONResponse }
+
+func (response RegisterEndpoint401JSONResponse) VisitRegisterEndpointResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(401)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type RegisterEndpoint403JSONResponse struct{ ForbiddenJSONResponse }
+
+func (response RegisterEndpoint403JSONResponse) VisitRegisterEndpointResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(403)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
 type RegisterEndpoint500JSONResponse Error
 
 func (response RegisterEndpoint500JSONResponse) VisitRegisterEndpointResponse(w http.ResponseWriter) error {
@@ -1210,6 +1335,34 @@ type DeleteEndpoint204Response struct {
 func (response DeleteEndpoint204Response) VisitDeleteEndpointResponse(w http.ResponseWriter) error {
 	w.WriteHeader(204)
 	return nil
+}
+
+type DeleteEndpoint401JSONResponse struct{ UnauthorizedJSONResponse }
+
+func (response DeleteEndpoint401JSONResponse) VisitDeleteEndpointResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(401)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type DeleteEndpoint403JSONResponse struct{ ForbiddenJSONResponse }
+
+func (response DeleteEndpoint403JSONResponse) VisitDeleteEndpointResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(403)
+	_, err := buf.WriteTo(w)
+	return err
 }
 
 type DeleteEndpoint404JSONResponse Error
@@ -1258,6 +1411,34 @@ func (response GetEndpoint200JSONResponse) VisitGetEndpointResponse(w http.Respo
 	}
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type GetEndpoint401JSONResponse struct{ UnauthorizedJSONResponse }
+
+func (response GetEndpoint401JSONResponse) VisitGetEndpointResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(401)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type GetEndpoint403JSONResponse struct{ ForbiddenJSONResponse }
+
+func (response GetEndpoint403JSONResponse) VisitGetEndpointResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(403)
 	_, err := buf.WriteTo(w)
 	return err
 }
@@ -1321,6 +1502,34 @@ func (response UpdateEndpoint400JSONResponse) VisitUpdateEndpointResponse(w http
 	return err
 }
 
+type UpdateEndpoint401JSONResponse struct{ UnauthorizedJSONResponse }
+
+func (response UpdateEndpoint401JSONResponse) VisitUpdateEndpointResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(401)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type UpdateEndpoint403JSONResponse struct{ ForbiddenJSONResponse }
+
+func (response UpdateEndpoint403JSONResponse) VisitUpdateEndpointResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(403)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
 type UpdateEndpoint404JSONResponse Error
 
 func (response UpdateEndpoint404JSONResponse) VisitUpdateEndpointResponse(w http.ResponseWriter) error {
@@ -1367,6 +1576,34 @@ func (response GetAllSubscriptions200JSONResponse) VisitGetAllSubscriptionsRespo
 	}
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type GetAllSubscriptions401JSONResponse struct{ UnauthorizedJSONResponse }
+
+func (response GetAllSubscriptions401JSONResponse) VisitGetAllSubscriptionsResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(401)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type GetAllSubscriptions403JSONResponse struct{ ForbiddenJSONResponse }
+
+func (response GetAllSubscriptions403JSONResponse) VisitGetAllSubscriptionsResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(403)
 	_, err := buf.WriteTo(w)
 	return err
 }
@@ -1432,6 +1669,34 @@ func (response Subscribe400JSONResponse) VisitSubscribeResponse(w http.ResponseW
 	}
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(400)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type Subscribe401JSONResponse struct{ UnauthorizedJSONResponse }
+
+func (response Subscribe401JSONResponse) VisitSubscribeResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(401)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type Subscribe403JSONResponse struct{ ForbiddenJSONResponse }
+
+func (response Subscribe403JSONResponse) VisitSubscribeResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(403)
 	_, err := buf.WriteTo(w)
 	return err
 }
@@ -1514,6 +1779,34 @@ func (response PublishEvent400JSONResponse) VisitPublishEventResponse(w http.Res
 	return err
 }
 
+type PublishEvent401JSONResponse struct{ UnauthorizedJSONResponse }
+
+func (response PublishEvent401JSONResponse) VisitPublishEventResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(401)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type PublishEvent403JSONResponse struct{ ForbiddenJSONResponse }
+
+func (response PublishEvent403JSONResponse) VisitPublishEventResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(403)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
 type PublishEvent500JSONResponse Error
 
 func (response PublishEvent500JSONResponse) VisitPublishEventResponse(w http.ResponseWriter) error {
@@ -1546,6 +1839,34 @@ func (response GetEvent200JSONResponse) VisitGetEventResponse(w http.ResponseWri
 	}
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(200)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type GetEvent401JSONResponse struct{ UnauthorizedJSONResponse }
+
+func (response GetEvent401JSONResponse) VisitGetEventResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(401)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type GetEvent403JSONResponse struct{ ForbiddenJSONResponse }
+
+func (response GetEvent403JSONResponse) VisitGetEventResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(403)
 	_, err := buf.WriteTo(w)
 	return err
 }
@@ -1615,6 +1936,34 @@ func (response GetEventDeliveries400JSONResponse) VisitGetEventDeliveriesRespons
 	return err
 }
 
+type GetEventDeliveries401JSONResponse struct{ UnauthorizedJSONResponse }
+
+func (response GetEventDeliveries401JSONResponse) VisitGetEventDeliveriesResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(401)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type GetEventDeliveries403JSONResponse struct{ ForbiddenJSONResponse }
+
+func (response GetEventDeliveries403JSONResponse) VisitGetEventDeliveriesResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(403)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
 type GetEventDeliveries404JSONResponse Error
 
 func (response GetEventDeliveries404JSONResponse) VisitGetEventDeliveriesResponse(w http.ResponseWriter) error {
@@ -1657,6 +2006,34 @@ type DeleteSubscription204Response struct {
 func (response DeleteSubscription204Response) VisitDeleteSubscriptionResponse(w http.ResponseWriter) error {
 	w.WriteHeader(204)
 	return nil
+}
+
+type DeleteSubscription401JSONResponse struct{ UnauthorizedJSONResponse }
+
+func (response DeleteSubscription401JSONResponse) VisitDeleteSubscriptionResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(401)
+	_, err := buf.WriteTo(w)
+	return err
+}
+
+type DeleteSubscription403JSONResponse struct{ ForbiddenJSONResponse }
+
+func (response DeleteSubscription403JSONResponse) VisitDeleteSubscriptionResponse(w http.ResponseWriter) error {
+
+	var buf bytes.Buffer
+	if err := json.NewEncoder(&buf).Encode(response); err != nil {
+		return err
+	}
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(403)
+	_, err := buf.WriteTo(w)
+	return err
 }
 
 type DeleteSubscription404JSONResponse Error
@@ -2140,50 +2517,53 @@ func (sh *strictHandler) DeleteSubscription(w http.ResponseWriter, r *http.Reque
 // const string: with thousands of chunks the chained `+` fold is several
 // times slower for the Go compiler than parsing a slice literal.
 var swaggerSpec = []string{
-	"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",
-	"Gz6cJw7Sbz/c/isAAP//",
+	"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",
+	"c1sfSl9pvbHwdnNx858AAAD//w==",
 }
 
 // decodeSpec returns the embedded OpenAPI spec as raw JSON bytes,

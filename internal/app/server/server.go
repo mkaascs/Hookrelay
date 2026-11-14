@@ -55,8 +55,8 @@ func New(handlers apiv1.ServerInterface, cfg config.Config, log *slog.Logger) *S
 
 	// group keeps the validator off the swagger routes and lets it be added after them
 	router.Group(func(r chi.Router) {
-		r.Use(validator)
 		r.Use(middlewares.NewAPIAuth(log))
+		r.Use(validator)
 		apiv1.HandlerFromMuxWithBaseURL(handlers, r, "/api/v1")
 	})
 
