@@ -7,18 +7,20 @@ import (
 	"testing"
 	"time"
 
+	"webhook-delivery/internal/domain"
+	"webhook-delivery/internal/domain/dto"
+
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
 	"go.uber.org/mock/gomock"
-	"webhook-delivery/internal/domain"
-	"webhook-delivery/internal/domain/dto"
 )
 
-func newTestService(t *testing.T) (*Service, *MockDeliveryRepo) {
+func newTestService(t *testing.T) (*Service, *MockDeliveryRepo, *MockNotifier) {
 	ctrl := gomock.NewController(t)
 	repo := NewMockDeliveryRepo(ctrl)
+	notifier := NewMockNotifier(ctrl)
 	log := slog.New(slog.NewTextHandler(io.Discard, nil))
-	return NewService(repo, log), repo
+	return NewService(repo, notifier, log), repo, notifier
 }
 
 var (
@@ -32,7 +34,7 @@ func Test_Service_GetByID(t *testing.T) {
 	delivery := &domain.Delivery{ID: id, Status: domain.StatusDelivered}
 
 	t.Run("success", func(t *testing.T) {
-		svc, repo := newTestService(t)
+		svc, repo, _ := newTestService(t)
 		repo.EXPECT().GetByID(gomock.Any(), id).Return(delivery, nil)
 
 		got, err := svc.GetByID(context.Background(), id)
@@ -41,7 +43,7 @@ func Test_Service_GetByID(t *testing.T) {
 	})
 
 	t.Run("error is wrapped", func(t *testing.T) {
-		svc, repo := newTestService(t)
+		svc, repo, _ := newTestService(t)
 		repo.EXPECT().GetByID(gomock.Any(), id).Return(nil, domain.ErrDeliveryNotFound)
 
 		got, err := svc.GetByID(context.Background(), id)
@@ -57,7 +59,7 @@ func Test_Service_GetFromEvent(t *testing.T) {
 	}
 
 	t.Run("success", func(t *testing.T) {
-		svc, repo := newTestService(t)
+		svc, repo, _ := newTestService(t)
 		repo.EXPECT().GetFromEvent(gomock.Any(), dto.GetDeliveriesFromEventCommand{
 			EventID: eventID,
 		}).Return(deliveries, 12, nil)
@@ -72,7 +74,7 @@ func Test_Service_GetFromEvent(t *testing.T) {
 	})
 
 	t.Run("error is wrapped", func(t *testing.T) {
-		svc, repo := newTestService(t)
+		svc, repo, _ := newTestService(t)
 		repo.EXPECT().GetFromEvent(gomock.Any(), dto.GetDeliveriesFromEventCommand{
 			EventID: eventID,
 		}).Return(nil, 0, domain.ErrEventNotFound)
@@ -90,15 +92,18 @@ func Test_Service_GetFromEvent(t *testing.T) {
 func Test_Service_Retry(t *testing.T) {
 	id := deliveryID
 
-	t.Run("success resets the delivery to pending", func(t *testing.T) {
-		svc, repo := newTestService(t)
+	t.Run("success resets the delivery to pending and notifies dispatcher", func(t *testing.T) {
+		svc, repo, notifier := newTestService(t)
 
 		var got dto.UpdateDeliveryStatusCommand
-		repo.EXPECT().UpdateStatus(gomock.Any(), gomock.Any()).
-			DoAndReturn(func(_ context.Context, cmd dto.UpdateDeliveryStatusCommand) error {
-				got = cmd
-				return nil
-			})
+		gomock.InOrder(
+			repo.EXPECT().UpdateStatus(gomock.Any(), gomock.Any()).
+				DoAndReturn(func(_ context.Context, cmd dto.UpdateDeliveryStatusCommand) error {
+					got = cmd
+					return nil
+				}),
+			notifier.EXPECT().Notify(),
+		)
 
 		before := time.Now()
 		require.NoError(t, svc.Retry(context.Background(), id))
@@ -111,8 +116,8 @@ func Test_Service_Retry(t *testing.T) {
 		require.False(t, got.NextRetryAt.Before(before))
 	})
 
-	t.Run("error is wrapped", func(t *testing.T) {
-		svc, repo := newTestService(t)
+	t.Run("error is wrapped and dispatcher is not notified", func(t *testing.T) {
+		svc, repo, _ := newTestService(t)
 		repo.EXPECT().UpdateStatus(gomock.Any(), gomock.Any()).Return(domain.ErrDeliveryNotFound)
 
 		require.ErrorIs(t, svc.Retry(context.Background(), id), domain.ErrDeliveryNotFound)

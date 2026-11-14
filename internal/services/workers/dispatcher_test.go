@@ -125,3 +125,57 @@ func Test_Dispatcher_Run(t *testing.T) {
 		t.Fatal("Run did not stop after context cancel")
 	}
 }
+
+func Test_Notify(t *testing.T) {
+	t.Run("does not block when nobody reads", func(t *testing.T) {
+		dispatcher, _, _ := newTestDispatcher(t, config.Dispatcher{})
+
+		done := make(chan struct{})
+		go func() {
+			for range 10 {
+				dispatcher.Notify()
+			}
+			close(done)
+		}()
+
+		select {
+		case <-done:
+		case <-time.After(time.Second):
+			t.Fatal("Notify blocked")
+		}
+
+		require.Len(t, dispatcher.notify, 1)
+	})
+
+	t.Run("triggers dispatch without waiting for ticker", func(t *testing.T) {
+		dispatcher, queue, repo := newTestDispatcher(t, config.Dispatcher{Interval: time.Hour, BatchSize: 10})
+
+		ctx, cancel := context.WithCancel(context.Background())
+		defer cancel()
+
+		dispatched := make(chan struct{})
+		queue.EXPECT().FreeSlots().Return(10)
+		repo.EXPECT().ClaimPending(gomock.Any(), 10).
+			DoAndReturn(func(context.Context, int) ([]*domain.PendingDelivery, error) {
+				close(dispatched)
+				return nil, nil
+			})
+
+		done := make(chan struct{})
+		go func() {
+			dispatcher.Run(ctx)
+			close(done)
+		}()
+
+		dispatcher.Notify()
+
+		select {
+		case <-dispatched:
+		case <-time.After(5 * time.Second):
+			t.Fatal("Notify did not trigger dispatch")
+		}
+
+		cancel()
+		<-done
+	})
+}

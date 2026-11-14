@@ -18,13 +18,18 @@ type DeliveryRepo interface {
 	UpdateStatus(ctx context.Context, command dto.UpdateDeliveryStatusCommand) error
 }
 
-type Service struct {
-	log  *slog.Logger
-	repo DeliveryRepo
+type Notifier interface {
+	Notify()
 }
 
-func NewService(repo DeliveryRepo, log *slog.Logger) *Service {
-	return &Service{repo: repo, log: log}
+type Service struct {
+	log      *slog.Logger
+	repo     DeliveryRepo
+	notifier Notifier
+}
+
+func NewService(repo DeliveryRepo, notifier Notifier, log *slog.Logger) *Service {
+	return &Service{repo: repo, notifier: notifier, log: log}
 }
 
 func (s *Service) Retry(ctx context.Context, id uuid.UUID) error {
@@ -45,6 +50,8 @@ func (s *Service) Retry(ctx context.Context, id uuid.UUID) error {
 		s.logError(log, msg, err, slog.String("delivery_id", id.String()))
 		return fmt.Errorf("%s: %s: %w", fn, msg, err)
 	}
+
+	s.notifier.Notify()
 
 	log.Info("delivery was retried", slog.String("delivery_id", id.String()))
 

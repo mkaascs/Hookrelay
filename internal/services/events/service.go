@@ -20,17 +20,23 @@ type DeliveryRepo interface {
 	CreateForEvent(ctx context.Context, eventID uuid.UUID, eventType string) (int, error)
 }
 
+type Notifier interface {
+	Notify()
+}
+
 type Service struct {
 	log          *slog.Logger
 	eventRepo    EventRepo
 	deliveryRepo DeliveryRepo
+	notifier     Notifier
 }
 
-func NewService(eventRepo EventRepo, deliveryRepo DeliveryRepo, log *slog.Logger) *Service {
+func NewService(eventRepo EventRepo, deliveryRepo DeliveryRepo, notifier Notifier, log *slog.Logger) *Service {
 	return &Service{
 		log:          log,
 		eventRepo:    eventRepo,
 		deliveryRepo: deliveryRepo,
+		notifier:     notifier,
 	}
 }
 
@@ -50,6 +56,10 @@ func (s *Service) Publish(ctx context.Context, command dto.PublishEventCommand) 
 		const msg = "failed to create deliveries for event"
 		s.logError(log, msg, err, slog.String("event_id", event.ID.String()))
 		return nil, 0, fmt.Errorf("%s: %s: %w", fn, msg, err)
+	}
+
+	if count > 0 {
+		s.notifier.Notify()
 	}
 
 	log.Info("event was published successfully", slog.String("event_id", event.ID.String()), slog.String("event_type", event.Type))

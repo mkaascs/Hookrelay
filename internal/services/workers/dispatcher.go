@@ -21,8 +21,9 @@ type Queue interface {
 }
 
 type Dispatcher struct {
-	queue Queue
-	repo  DispatcherRepo
+	queue  Queue
+	repo   DispatcherRepo
+	notify chan struct{}
 
 	cfg config.Dispatcher
 	log *slog.Logger
@@ -30,10 +31,11 @@ type Dispatcher struct {
 
 func NewDispatcher(queue Queue, repo DispatcherRepo, cfg config.Dispatcher, log *slog.Logger) *Dispatcher {
 	return &Dispatcher{
-		queue: queue,
-		repo:  repo,
-		cfg:   cfg,
-		log:   log,
+		queue:  queue,
+		repo:   repo,
+		cfg:    cfg,
+		log:    log,
+		notify: make(chan struct{}, 1),
 	}
 }
 
@@ -46,6 +48,8 @@ func (d *Dispatcher) Run(ctx context.Context) {
 		case <-ctx.Done():
 			return
 		case <-ticker.C:
+			d.dispatch(ctx)
+		case <-d.notify:
 			d.dispatch(ctx)
 		}
 	}
@@ -62,6 +66,13 @@ func (d *Dispatcher) Recover(ctx context.Context) error {
 	}
 
 	return nil
+}
+
+func (d *Dispatcher) Notify() {
+	select {
+	case d.notify <- struct{}{}:
+	default:
+	}
 }
 
 func (d *Dispatcher) dispatch(ctx context.Context) {
