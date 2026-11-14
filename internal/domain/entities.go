@@ -3,10 +3,22 @@ package domain
 import (
 	"encoding/json"
 	"time"
+
+	"github.com/google/uuid"
+)
+
+type DeliveryStatus string
+
+const (
+	StatusDelivered  DeliveryStatus = "delivered"
+	StatusPending    DeliveryStatus = "pending"
+	StatusFailed     DeliveryStatus = "failed"
+	StatusProcessing DeliveryStatus = "processing"
+	StatusQueued     DeliveryStatus = "queued"
 )
 
 type Endpoint struct {
-	ID          string
+	ID          uuid.UUID
 	URL         string
 	Secret      string
 	EventTypes  []string
@@ -16,32 +28,23 @@ type Endpoint struct {
 }
 
 type Subscription struct {
-	ID         string
-	EndpointID string
+	ID         uuid.UUID
+	EndpointID uuid.UUID
 	EventType  string
 	CreatedAt  time.Time
 }
 
 type Event struct {
-	ID        string
+	ID        uuid.UUID
 	Type      string
 	Payload   json.RawMessage
 	CreatedAt time.Time
 }
 
-type DeliveryStatus string
-
-const (
-	StatusDelivered  DeliveryStatus = "delivered"
-	StatusPending    DeliveryStatus = "pending"
-	StatusFailed     DeliveryStatus = "failed"
-	StatusProcessing DeliveryStatus = "processing"
-)
-
 type Delivery struct {
-	ID               string
-	EndpointID       string
-	EventID          string
+	ID               uuid.UUID
+	EndpointID       uuid.UUID
+	EventID          uuid.UUID
 	Status           DeliveryStatus
 	Attempts         int
 	MaxAttempts      int
@@ -49,4 +52,11 @@ type Delivery struct {
 	CreatedAt        time.Time
 	LastResponseCode *int
 	LastError        *string
+}
+
+type PendingDelivery struct {
+	Delivery
+	URL     string
+	Secret  string
+	Payload json.RawMessage
 }

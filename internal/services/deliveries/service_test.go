@@ -2,27 +2,36 @@ package deliveries
 
 import (
 	"context"
+	"errors"
 	"io"
 	"log/slog"
 	"testing"
 	"time"
 
-	"github.com/golang/mock/gomock"
-	"github.com/stretchr/testify/require"
 	"webhook-delivery/internal/domain"
 	"webhook-delivery/internal/domain/dto"
+
+	"github.com/google/uuid"
+	"github.com/stretchr/testify/require"
+	"go.uber.org/mock/gomock"
 )
 
-func newTestService(t *testing.T) (*Service, *MockDeliveryRepo, *MockRetryNotifier) {
+func newTestService(t *testing.T) (*Service, *MockDeliveryRepo, *MockNotifier) {
 	ctrl := gomock.NewController(t)
 	repo := NewMockDeliveryRepo(ctrl)
-	notifier := NewMockRetryNotifier(ctrl)
+	notifier := NewMockNotifier(ctrl)
 	log := slog.New(slog.NewTextHandler(io.Discard, nil))
 	return NewService(repo, notifier, log), repo, notifier
 }
 
+var (
+	deliveryID  = uuid.MustParse("01900000-0000-7000-8000-000000000001")
+	deliveryID2 = uuid.MustParse("01900000-0000-7000-8000-000000000002")
+	eventID     = uuid.MustParse("01900000-0000-7000-8000-0000000000e1")
+)
+
 func Test_Service_GetByID(t *testing.T) {
-	const id = "del-1"
+	id := deliveryID
 	delivery := &domain.Delivery{ID: id, Status: domain.StatusDelivered}
 
 	t.Run("success", func(t *testing.T) {
@@ -31,7 +40,7 @@ func Test_Service_GetByID(t *testing.T) {
 
 		got, err := svc.GetByID(context.Background(), id)
 		require.NoError(t, err)
-		require.Equal(t, &dto.GetDeliveryResult{Delivery: *delivery}, got)
+		require.Equal(t, delivery, got)
 	})
 
 	t.Run("error is wrapped", func(t *testing.T) {
@@ -45,14 +54,9 @@ func Test_Service_GetByID(t *testing.T) {
 }
 
 func Test_Service_GetFromEvent(t *testing.T) {
-	const eventID = "ev-1"
 	deliveries := []domain.Delivery{
-		{ID: "del-1", EventID: eventID, Status: domain.StatusPending},
-		{ID: "del-2", EventID: eventID, Status: domain.StatusFailed},
-	}
-	want := &dto.GetDeliveriesFromEventResult{
-		Total:      12,
-		Deliveries: deliveries,
+		{ID: deliveryID, EventID: eventID, Status: domain.StatusPending},
+		{ID: deliveryID2, EventID: eventID, Status: domain.StatusFailed},
 	}
 
 	t.Run("success", func(t *testing.T) {
@@ -61,12 +65,13 @@ func Test_Service_GetFromEvent(t *testing.T) {
 			EventID: eventID,
 		}).Return(deliveries, 12, nil)
 
-		got, err := svc.GetFromEvent(context.Background(), dto.GetDeliveriesFromEventCommand{
+		got, total, err := svc.GetFromEvent(context.Background(), dto.GetDeliveriesFromEventCommand{
 			EventID: eventID,
 		})
 
 		require.NoError(t, err)
-		require.Equal(t, want, got)
+		require.Equal(t, deliveries, got)
+		require.Equal(t, 12, total)
 	})
 
 	t.Run("error is wrapped", func(t *testing.T) {
@@ -75,45 +80,68 @@ func Test_Service_GetFromEvent(t *testing.T) {
 			EventID: eventID,
 		}).Return(nil, 0, domain.ErrEventNotFound)
 
-		got, err := svc.GetFromEvent(context.Background(), dto.GetDeliveriesFromEventCommand{
+		got, total, err := svc.GetFromEvent(context.Background(), dto.GetDeliveriesFromEventCommand{
 			EventID: eventID,
 		})
 
 		require.Nil(t, got)
+		require.Zero(t, total)
 		require.ErrorIs(t, err, domain.ErrEventNotFound)
 	})
 }
 
 func Test_Service_Retry(t *testing.T) {
-	const id = "del-1"
+	id := deliveryID
 
-	t.Run("success resets the delivery to pending", func(t *testing.T) {
-		svc, repo, notifier := newTestService(t)
+	for _, status := range []domain.DeliveryStatus{domain.StatusFailed, domain.StatusDelivered} {
+		t.Run(string(status)+" delivery is reset to pending and dispatcher is notified", func(t *testing.T) {
+			svc, repo, notifier := newTestService(t)
 
-		var got dto.UpdateDeliveryStatusCommand
-		repo.EXPECT().UpdateStatus(gomock.Any(), gomock.Any()).
-			DoAndReturn(func(_ context.Context, cmd dto.UpdateDeliveryStatusCommand) error {
-				got = cmd
-				return nil
-			})
+			var got dto.UpdateDeliveryStatusCommand
+			gomock.InOrder(
+				repo.EXPECT().GetByID(gomock.Any(), id).
+					Return(&domain.Delivery{ID: id, Status: status, Attempts: 5}, nil),
+				repo.EXPECT().UpdateStatus(gomock.Any(), gomock.Any()).
+					DoAndReturn(func(_ context.Context, cmd dto.UpdateDeliveryStatusCommand) error {
+						got = cmd
+						return nil
+					}),
+				notifier.EXPECT().Notify(),
+			)
 
-		notifier.EXPECT().Notify()
+			before := time.Now()
+			require.NoError(t, svc.Retry(context.Background(), id))
 
-		before := time.Now()
-		require.NoError(t, svc.Retry(context.Background(), id))
+			require.Equal(t, id, got.ID)
+			require.Equal(t, domain.StatusPending, got.Status)
+			require.Equal(t, 0, got.Attempts)
+			require.Nil(t, got.LastError)
+			require.Nil(t, got.LastResponseCode)
+			require.False(t, got.NextRetryAt.Before(before))
+		})
+	}
 
-		require.Equal(t, id, got.ID)
-		require.Equal(t, domain.StatusPending, got.Status)
-		require.Equal(t, 0, got.Attempts)
-		require.Nil(t, got.LastError)
-		require.Nil(t, got.LastResponseCode)
-		require.False(t, got.NextRetryAt.Before(before))
-	})
+	for _, status := range []domain.DeliveryStatus{domain.StatusPending, domain.StatusQueued, domain.StatusProcessing} {
+		t.Run(string(status)+" delivery cannot be retried", func(t *testing.T) {
+			svc, repo, _ := newTestService(t)
+			repo.EXPECT().GetByID(gomock.Any(), id).Return(&domain.Delivery{ID: id, Status: status}, nil)
 
-	t.Run("error is wrapped", func(t *testing.T) {
+			require.ErrorIs(t, svc.Retry(context.Background(), id), domain.ErrDeliveryIsActive)
+		})
+	}
+
+	t.Run("get error is wrapped and delivery is not updated", func(t *testing.T) {
 		svc, repo, _ := newTestService(t)
-		repo.EXPECT().UpdateStatus(gomock.Any(), gomock.Any()).Return(domain.ErrDeliveryNotFound)
+		repo.EXPECT().GetByID(gomock.Any(), id).Return(nil, domain.ErrDeliveryNotFound)
 
 		require.ErrorIs(t, svc.Retry(context.Background(), id), domain.ErrDeliveryNotFound)
+	})
+
+	t.Run("update error is wrapped and dispatcher is not notified", func(t *testing.T) {
+		svc, repo, _ := newTestService(t)
+		repo.EXPECT().GetByID(gomock.Any(), id).Return(&domain.Delivery{ID: id, Status: domain.StatusFailed}, nil)
+		repo.EXPECT().UpdateStatus(gomock.Any(), gomock.Any()).Return(errors.New("db down"))
+
+		require.Error(t, svc.Retry(context.Background(), id))
 	})
 }

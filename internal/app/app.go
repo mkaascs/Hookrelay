@@ -1,118 +1,103 @@
 package app
 
 import (
+	"context"
+	"errors"
 	"log/slog"
+	"net/http"
 	"os"
-	"webhook-delivery/internal/app/http"
-	"webhook-delivery/internal/app/pg"
-	"webhook-delivery/internal/app/workers"
+	"webhook-delivery/internal/app/postgres"
+	"webhook-delivery/internal/app/server"
 	"webhook-delivery/internal/config"
-	"webhook-delivery/internal/delivery/handlers/deliveries"
-	"webhook-delivery/internal/delivery/handlers/endpoints"
-	"webhook-delivery/internal/delivery/handlers/events"
-	"webhook-delivery/internal/delivery/handlers/subscriptions"
-	"webhook-delivery/internal/delivery/middlewares"
+	"webhook-delivery/internal/delivery/rest"
 	pgRepo "webhook-delivery/internal/infrastructure/pg"
-	deliverySvc "webhook-delivery/internal/services/deliveries"
-	endpointSvc "webhook-delivery/internal/services/endpoints"
-	eventSvc "webhook-delivery/internal/services/events"
-	subscriptionsSvc "webhook-delivery/internal/services/subscriptions"
-
-	"github.com/go-chi/chi"
-	"github.com/go-chi/chi/middleware"
+	sloglib "webhook-delivery/internal/lib/logging/slog"
+	"webhook-delivery/internal/services/deliveries"
+	"webhook-delivery/internal/services/endpoints"
+	"webhook-delivery/internal/services/events"
+	"webhook-delivery/internal/services/subscriptions"
+	"webhook-delivery/internal/services/workers"
 )
 
 type App struct {
-	HTTP     *http.App
-	Postgres *pg.App
-	Workers  *workers.App
+	Server   *server.Server
+	Postgres *postgres.App
 
-	cfg config.Config
+	workers    *workers.Worker
+	dispatcher *workers.Dispatcher
+
 	log *slog.Logger
+	cfg config.Config
+
+	ctx    context.Context
+	cancel context.CancelFunc
 }
 
 func New(log *slog.Logger, cfg config.Config) *App {
-	postgresApp, err := pg.New(log, cfg.DbConfig)
+	postgresApp, err := postgres.New(log, cfg.DB)
 	if err != nil {
-		log.Error(err.Error())
 		os.Exit(1)
 	}
 
-	pg.MustMigrate(log, cfg.DbConfig)
+	postgresApp.MustConnect()
+	postgres.MustMigrate(log, cfg.DB)
 
-	deliveryRepo := pgRepo.NewDeliveries(postgresApp.Pool, log, cfg.MaxAttempts)
+	eventRepo := pgRepo.NewEvents(postgresApp.Pool, log, cfg.MaxAttempts)
+	endpointRepo := pgRepo.NewEndpoints(postgresApp.Pool, log)
+	deliveryRepo := pgRepo.NewDeliveries(postgresApp.Pool, log)
+	subscriptionRepo := pgRepo.NewSubscriptions(postgresApp.Pool, log)
+
+	worker := workers.NewWorkers(deliveryRepo, cfg.Workers, log)
+	dispatcher := workers.NewDispatcher(worker, deliveryRepo, cfg.Dispatcher, log)
+
+	handler := rest.NewHandler(rest.Services{
+		Deliveries:    deliveries.NewService(deliveryRepo, dispatcher, log),
+		Endpoints:     endpoints.NewService(endpointRepo, log),
+		Subscriptions: subscriptions.NewService(subscriptionRepo, log),
+		Events:        events.NewService(eventRepo, dispatcher, log),
+	})
+
+	ctx, cancel := context.WithCancel(context.Background())
 
 	return &App{
-		HTTP:     http.New(log, cfg.HttpConfig),
-		Postgres: postgresApp,
-		Workers:  workers.NewApp(deliveryRepo, log, cfg.WorkersConfig),
-		cfg:      cfg,
-		log:      log,
+		Server:     server.New(handler, cfg, log),
+		Postgres:   postgresApp,
+		workers:    worker,
+		dispatcher: dispatcher,
+		log:        log,
+		cfg:        cfg,
+		ctx:        ctx,
+		cancel:     cancel,
 	}
 }
 
-func (a *App) MountMiddlewares() {
-	a.HTTP.Router.Use(middleware.RequestID)
-	a.HTTP.Router.Use(middleware.RealIP)
-	a.HTTP.Router.Use(middleware.Recoverer)
-	a.HTTP.Router.Use(middleware.URLFormat)
-	a.HTTP.Router.Use(middlewares.NewLogger(a.log))
+func (a *App) MustRun() {
+	const fn = "app.App.MustRun"
+	log := a.log.With(slog.String("fn", fn))
+
+	if err := a.dispatcher.Recover(a.ctx); err != nil {
+		log.Error("failed to recover deliveries", sloglib.Error(err))
+		os.Exit(1)
+	}
+
+	go a.workers.Run(a.ctx)
+	go a.dispatcher.Run(a.ctx)
+
+	log.Info("workers and dispatcher is running", slog.Int("workers_count", a.cfg.MaxGoroutines))
+
+	a.log.Info("http server is running")
+	if err := a.Server.Run(); err != nil && !errors.Is(err, http.ErrServerClosed) {
+		a.log.Error("http server failed", sloglib.Error(err))
+		os.Exit(1)
+	}
 }
 
-func (a *App) MountHandlers() {
-	eventRepo := pgRepo.NewEvents(a.Postgres.Pool, a.log)
-	endpointRepo := pgRepo.NewEndpoints(a.Postgres.Pool, a.log)
-	deliveryRepo := pgRepo.NewDeliveries(a.Postgres.Pool, a.log, a.cfg.MaxAttempts)
-	subscriptionsRepo := pgRepo.NewSubscriptions(a.Postgres.Pool, a.log)
+func (a *App) Shutdown(ctx context.Context) {
+	a.cancel()
 
-	eventService := eventSvc.NewService(eventRepo, deliveryRepo, a.Workers.Workers, a.log)
-	endpointService := endpointSvc.NewService(endpointRepo, a.log)
-	deliveryService := deliverySvc.NewService(deliveryRepo, a.Workers.Workers, a.log)
-	subscriptionService := subscriptionsSvc.NewService(subscriptionsRepo, a.log)
+	if err := a.Server.Shutdown(ctx); err != nil {
+		a.log.Error("failed to shutdown http server", sloglib.Error(err))
+	}
 
-	a.HTTP.Router.Route("/api/v1", func(r chi.Router) {
-		r.Route("/endpoints", func(r chi.Router) {
-			r.Delete("/{id}", endpoints.Delete(endpointService, a.log))
-			r.With(middlewares.NewUrlPaginationParser(a.log)).
-				Get("/", endpoints.GetAll(endpointService, a.log))
-
-			r.Get("/{id}", endpoints.Get(endpointService, a.log))
-
-			r.With(middlewares.NewBodyParser[endpoints.RegisterRequest](a.log)).
-				With(middlewares.NewValidator[endpoints.RegisterRequest](a.log)).
-				Post("/", endpoints.Register(endpointService, a.log))
-
-			r.With(middlewares.NewBodyParser[endpoints.UpdateRequest](a.log)).
-				With(middlewares.NewValidator[endpoints.UpdateRequest](a.log)).
-				Patch("/{id}", endpoints.Update(endpointService, a.log))
-
-			r.Route("/{id}/subscriptions", func(r chi.Router) {
-				r.With(middlewares.NewBodyParser[subscriptions.SubscribeRequest](a.log)).
-					With(middlewares.NewValidator[subscriptions.SubscribeRequest](a.log)).
-					Post("/", subscriptions.Subscribe(subscriptionService, a.log))
-
-				r.Get("/", subscriptions.GetAll(subscriptionService, a.log))
-			})
-		})
-
-		r.Route("/events", func(r chi.Router) {
-			r.With(middlewares.NewBodyParser[events.PublishRequest](a.log)).
-				With(middlewares.NewValidator[events.PublishRequest](a.log)).
-				Post("/", events.Publish(eventService, a.log))
-
-			r.Get("/{id}", events.Get(eventService, a.log))
-
-			r.With(middlewares.NewUrlPaginationParser(a.log)).
-				Get("/{id}/deliveries", deliveries.GetFromEvent(deliveryService, a.log))
-		})
-
-		r.Route("/subscriptions", func(r chi.Router) {
-			r.Delete("/{id}", subscriptions.Delete(subscriptionService, a.log))
-		})
-
-		r.Route("/deliveries", func(r chi.Router) {
-			r.Post("/{id}/retry", deliveries.Retry(deliveryService, a.log))
-			r.Get("/{id}", deliveries.Get(deliveryService, a.log))
-		})
-	})
+	a.Postgres.Close()
 }
