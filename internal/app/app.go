@@ -10,7 +10,7 @@ import (
 	"webhook-delivery/internal/app/server"
 	"webhook-delivery/internal/config"
 	"webhook-delivery/internal/delivery/rest"
-	pgRepo "webhook-delivery/internal/infrastructure/pg"
+	pgRepo "webhook-delivery/internal/infrastructure/postgres"
 	sloglib "webhook-delivery/internal/lib/logging/slog"
 	"webhook-delivery/internal/services/deliveries"
 	"webhook-delivery/internal/services/endpoints"

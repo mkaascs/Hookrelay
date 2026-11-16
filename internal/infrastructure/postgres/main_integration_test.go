@@ -1,6 +1,6 @@
 //go:build integration
 
-package pg
+package postgres
 
 import (
 	"context"
@@ -17,7 +17,7 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/stretchr/testify/require"
 	"github.com/testcontainers/testcontainers-go"
-	"github.com/testcontainers/testcontainers-go/modules/postgres"
+	pg "github.com/testcontainers/testcontainers-go/modules/postgres"
 )
 
 var pool *pgxpool.Pool
@@ -35,11 +35,11 @@ func TestMain(m *testing.M) {
 func run(m *testing.M) (int, error) {
 	ctx := context.Background()
 
-	container, err := postgres.Run(ctx, "postgres:17",
-		postgres.WithDatabase("test"),
-		postgres.WithUsername("test"),
-		postgres.WithPassword("test"),
-		postgres.BasicWaitStrategies())
+	container, err := pg.Run(ctx, "postgres:17",
+		pg.WithDatabase("test"),
+		pg.WithUsername("test"),
+		pg.WithPassword("test"),
+		pg.BasicWaitStrategies())
 
 	if err != nil {
 		return 1, fmt.Errorf("failed to start postgres: %w", err)
