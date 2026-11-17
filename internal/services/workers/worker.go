@@ -24,9 +24,15 @@ type DeliveryRepo interface {
 	UpdateStatus(ctx context.Context, command dto.UpdateDeliveryStatusCommand) error
 }
 
+type Metrics interface {
+	IncFailed()
+	IncDelivered()
+}
+
 type Worker struct {
 	httpClient   *http.Client
 	deliveryRepo DeliveryRepo
+	metrics      Metrics
 
 	log *slog.Logger
 	cfg config.Workers
@@ -35,10 +41,11 @@ type Worker struct {
 	queue chan domain.PendingDelivery
 }
 
-func NewWorkers(repo DeliveryRepo, cfg config.Workers, log *slog.Logger) *Worker {
+func NewWorkers(repo DeliveryRepo, metrics Metrics, cfg config.Workers, log *slog.Logger) *Worker {
 	return &Worker{
 		httpClient:   &http.Client{Timeout: cfg.Timeout},
 		deliveryRepo: repo,
+		metrics:      metrics,
 		log:          log,
 		cfg:          cfg,
 		wg:           sync.WaitGroup{},
@@ -93,8 +100,10 @@ func (w *Worker) process(ctx context.Context, delivery domain.PendingDelivery) {
 
 		if err != nil {
 			log.Warn("failed to update delivery", slog.String("delivery_id", delivery.ID.String()), sloglib.Error(err))
+			return
 		}
 
+		w.metrics.IncDelivered()
 		return
 	}
 
@@ -116,6 +125,11 @@ func (w *Worker) process(ctx context.Context, delivery domain.PendingDelivery) {
 
 	if err := w.deliveryRepo.UpdateStatus(ctx, command); err != nil {
 		log.Warn("failed to update delivery", slog.String("delivery_id", delivery.ID.String()), sloglib.Error(err))
+		return
+	}
+
+	if command.Status == domain.StatusFailed {
+		w.metrics.IncFailed()
 	}
 }
 

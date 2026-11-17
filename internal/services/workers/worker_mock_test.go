@@ -54,3 +54,51 @@ func (mr *MockDeliveryRepoMockRecorder) UpdateStatus(ctx, command any) *gomock.C
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "UpdateStatus", reflect.TypeOf((*MockDeliveryRepo)(nil).UpdateStatus), ctx, command)
 }
+
+// MockMetrics is a mock of Metrics interface.
+type MockMetrics struct {
+	ctrl     *gomock.Controller
+	recorder *MockMetricsMockRecorder
+	isgomock struct{}
+}
+
+// MockMetricsMockRecorder is the mock recorder for MockMetrics.
+type MockMetricsMockRecorder struct {
+	mock *MockMetrics
+}
+
+// NewMockMetrics creates a new mock instance.
+func NewMockMetrics(ctrl *gomock.Controller) *MockMetrics {
+	mock := &MockMetrics{ctrl: ctrl}
+	mock.recorder = &MockMetricsMockRecorder{mock}
+	return mock
+}
+
+// EXPECT returns an object that allows the caller to indicate expected use.
+func (m *MockMetrics) EXPECT() *MockMetricsMockRecorder {
+	return m.recorder
+}
+
+// IncDelivered mocks base method.
+func (m *MockMetrics) IncDelivered() {
+	m.ctrl.T.Helper()
+	m.ctrl.Call(m, "IncDelivered")
+}
+
+// IncDelivered indicates an expected call of IncDelivered.
+func (mr *MockMetricsMockRecorder) IncDelivered() *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "IncDelivered", reflect.TypeOf((*MockMetrics)(nil).IncDelivered))
+}
+
+// IncFailed mocks base method.
+func (m *MockMetrics) IncFailed() {
+	m.ctrl.T.Helper()
+	m.ctrl.Call(m, "IncFailed")
+}
+
+// IncFailed indicates an expected call of IncFailed.
+func (mr *MockMetricsMockRecorder) IncFailed() *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "IncFailed", reflect.TypeOf((*MockMetrics)(nil).IncFailed))
+}
