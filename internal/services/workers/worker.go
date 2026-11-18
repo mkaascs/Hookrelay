@@ -27,6 +27,8 @@ type DeliveryRepo interface {
 type Metrics interface {
 	IncFailed()
 	IncDelivered()
+	IncQueueSize()
+	DecQueueSize()
 }
 
 type Worker struct {
@@ -61,6 +63,7 @@ func (w *Worker) Run(ctx context.Context) {
 				case <-ctx.Done():
 					return
 				case delivery := <-w.queue:
+					w.metrics.DecQueueSize()
 					w.process(ctx, delivery)
 				}
 			}
@@ -72,6 +75,7 @@ func (w *Worker) Run(ctx context.Context) {
 
 func (w *Worker) Enqueue(delivery domain.PendingDelivery) {
 	w.queue <- delivery
+	w.metrics.IncQueueSize()
 }
 
 func (w *Worker) FreeSlots() int {
