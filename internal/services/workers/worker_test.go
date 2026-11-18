@@ -291,12 +291,14 @@ func Test_backoff(t *testing.T) {
 }
 
 func Test_EnqueueAndFreeSlots(t *testing.T) {
-	worker, _, _ := newTestWorker(t, testWorkersConfig())
+	worker, _, metrics := newTestWorker(t, testWorkersConfig())
 	require.Equal(t, 2, worker.FreeSlots())
 
+	metrics.EXPECT().IncQueueSize().Return()
 	worker.Enqueue(newPendingDelivery("http://example.com", 0))
 	require.Equal(t, 1, worker.FreeSlots())
 
+	metrics.EXPECT().IncQueueSize().Return()
 	worker.Enqueue(newPendingDelivery("http://example.com", 0))
 	require.Zero(t, worker.FreeSlots())
 }
@@ -318,6 +320,8 @@ func Test_Run(t *testing.T) {
 		})
 
 	metrics.EXPECT().IncDelivered().Return()
+	metrics.EXPECT().DecQueueSize().Return()
+	metrics.EXPECT().IncQueueSize().Return()
 
 	ctx, cancel := context.WithCancel(context.Background())
 	done := make(chan struct{})

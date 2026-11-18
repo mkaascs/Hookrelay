@@ -79,6 +79,18 @@ func (m *MockMetrics) EXPECT() *MockMetricsMockRecorder {
 	return m.recorder
 }
 
+// DecQueueSize mocks base method.
+func (m *MockMetrics) DecQueueSize() {
+	m.ctrl.T.Helper()
+	m.ctrl.Call(m, "DecQueueSize")
+}
+
+// DecQueueSize indicates an expected call of DecQueueSize.
+func (mr *MockMetricsMockRecorder) DecQueueSize() *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "DecQueueSize", reflect.TypeOf((*MockMetrics)(nil).DecQueueSize))
+}
+
 // IncDelivered mocks base method.
 func (m *MockMetrics) IncDelivered() {
 	m.ctrl.T.Helper()
@@ -101,4 +113,16 @@ func (m *MockMetrics) IncFailed() {
 func (mr *MockMetricsMockRecorder) IncFailed() *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "IncFailed", reflect.TypeOf((*MockMetrics)(nil).IncFailed))
+}
+
+// IncQueueSize mocks base method.
+func (m *MockMetrics) IncQueueSize() {
+	m.ctrl.T.Helper()
+	m.ctrl.Call(m, "IncQueueSize")
+}
+
+// IncQueueSize indicates an expected call of IncQueueSize.
+func (mr *MockMetricsMockRecorder) IncQueueSize() *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "IncQueueSize", reflect.TypeOf((*MockMetrics)(nil).IncQueueSize))
 }

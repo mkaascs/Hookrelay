@@ -93,12 +93,18 @@ func TestDeliveries_RecoverProcessing(t *testing.T) {
 	ids := make([]uuid.UUID, 0, len(statuses))
 
 	now := time.Now()
+	recovered := int64(0)
 	for _, status := range statuses {
+		if status == domain.StatusQueued || status == domain.StatusProcessing {
+			recovered++
+		}
+
 		ids = append(ids, insertDelivery(t, ep, string(status), now.Add(-time.Minute)))
 	}
 
-	err := repo.RecoverProcessing(ctx)
+	result, err := repo.RecoverProcessing(ctx)
 	require.NoError(t, err)
+	require.Equal(t, recovered, result)
 
 	for index := 0; index < len(ids); index++ {
 		got, err := repo.GetByID(ctx, ids[index])

@@ -12,7 +12,7 @@ import (
 
 type DispatcherRepo interface {
 	ClaimPending(ctx context.Context, limit int) ([]domain.PendingDelivery, error)
-	RecoverProcessing(ctx context.Context) error
+	RecoverProcessing(ctx context.Context) (int64, error)
 }
 
 type Queue interface {
@@ -59,11 +59,13 @@ func (d *Dispatcher) Recover(ctx context.Context) error {
 	const fn = "services.workers.Dispatcher.Recover"
 	log := d.log.With(slog.String("fn", fn))
 
-	err := d.repo.RecoverProcessing(ctx)
+	recovered, err := d.repo.RecoverProcessing(ctx)
 	if err != nil {
 		log.Error("failed to recover processing", sloglib.Error(err))
 		return fmt.Errorf("%s: %w", fn, err)
 	}
+
+	log.Info("queued/processing deliveries were recovered to pending", slog.Int64("count", recovered))
 
 	return nil
 }
