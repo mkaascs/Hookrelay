@@ -140,6 +140,8 @@ func Test_sendPostRequest(t *testing.T) {
 }
 
 func Test_process(t *testing.T) {
+	nonnegativeDuration := gomock.Cond(func(elapsed time.Duration) bool { return elapsed >= 0 })
+
 	tests := []struct {
 		name            string
 		serverCode      int // 0 means the receiver is unreachable
@@ -217,20 +219,31 @@ func Test_process(t *testing.T) {
 			}
 
 			worker, repo, metrics := newTestWorker(t, testWorkersConfig())
+			observeDuration := metrics.EXPECT().ObserveAttemptDuration(nonnegativeDuration)
 
 			var got dto.UpdateDeliveryStatusCommand
 			repo.EXPECT().UpdateStatus(gomock.Any(), gomock.Any()).
+				After(observeDuration).
 				DoAndReturn(func(_ context.Context, cmd dto.UpdateDeliveryStatusCommand) error {
 					got = cmd
 					return nil
 				})
 
+			switch {
+			case tt.serverCode == 0:
+				metrics.EXPECT().IncAttemptNoResponse()
+			case tt.wantStatus == domain.StatusDelivered:
+				metrics.EXPECT().IncAttemptSuccess()
+			default:
+				metrics.EXPECT().IncAttemptHttpError()
+			}
+
 			if tt.wantStatus == domain.StatusDelivered {
-				metrics.EXPECT().IncDelivered().Return()
+				metrics.EXPECT().IncCompletionDelivered().Return()
 			}
 
 			if tt.wantStatus == domain.StatusFailed {
-				metrics.EXPECT().IncFailed().Return()
+				metrics.EXPECT().IncCompletionFailed().Return()
 			}
 
 			before := time.Now()
@@ -250,14 +263,18 @@ func Test_process(t *testing.T) {
 		})
 	}
 
-	t.Run("update error is only logged", func(t *testing.T) {
+	t.Run("2xx with update error counts only the attempt", func(t *testing.T) {
 		srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 			w.WriteHeader(http.StatusOK)
 		}))
 		defer srv.Close()
 
-		worker, repo, _ := newTestWorker(t, testWorkersConfig())
-		repo.EXPECT().UpdateStatus(gomock.Any(), gomock.Any()).Return(errors.New("db down"))
+		worker, repo, metrics := newTestWorker(t, testWorkersConfig())
+		observeDuration := metrics.EXPECT().ObserveAttemptDuration(nonnegativeDuration)
+		metrics.EXPECT().IncAttemptSuccess()
+		repo.EXPECT().UpdateStatus(gomock.Any(), gomock.Any()).
+			After(observeDuration).
+			Return(errors.New("db down"))
 
 		require.NotPanics(t, func() {
 			worker.process(context.Background(), newPendingDelivery(srv.URL, 0))
@@ -320,7 +337,9 @@ func Test_Run(t *testing.T) {
 			return nil
 		})
 
-	metrics.EXPECT().IncDelivered().Return()
+	metrics.EXPECT().ObserveAttemptDuration(gomock.Any())
+	metrics.EXPECT().IncAttemptSuccess()
+	metrics.EXPECT().IncCompletionDelivered().Return()
 
 	ctx, cancel := context.WithCancel(context.Background())
 	done := make(chan struct{})

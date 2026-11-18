@@ -25,8 +25,12 @@ type DeliveryRepo interface {
 }
 
 type Metrics interface {
-	IncFailed()
-	IncDelivered()
+	IncCompletionFailed()
+	IncCompletionDelivered()
+	IncAttemptSuccess()
+	IncAttemptHttpError()
+	IncAttemptNoResponse()
+	ObserveAttemptDuration(elapsed time.Duration)
 }
 
 type Worker struct {
@@ -88,13 +92,18 @@ func (w *Worker) process(ctx context.Context, delivery domain.PendingDelivery) {
 
 	delivery.Attempts++
 
+	started := time.Now()
 	code, msg, err := w.sendPostRequest(ctx, delivery.URL, delivery.Payload, []byte(delivery.Secret))
+	w.metrics.ObserveAttemptDuration(time.Since(started))
+
 	if err != nil {
 		log.Warn("failed to send post request", slog.String("delivery_id", delivery.ID.String()), sloglib.Error(err))
 	}
 
 	if isSuccessCode(code) {
 		log.Info("successfully processed delivery", slog.String("delivery_id", delivery.ID.String()))
+		w.metrics.IncAttemptSuccess()
+
 		err := w.deliveryRepo.UpdateStatus(ctx, dto.UpdateDeliveryStatusCommand{
 			ID:          delivery.ID,
 			Status:      domain.StatusDelivered,
@@ -107,8 +116,14 @@ func (w *Worker) process(ctx context.Context, delivery domain.PendingDelivery) {
 			return
 		}
 
-		w.metrics.IncDelivered()
+		w.metrics.IncCompletionDelivered()
 		return
+	}
+
+	if code == 0 {
+		w.metrics.IncAttemptNoResponse()
+	} else {
+		w.metrics.IncAttemptHttpError()
 	}
 
 	log.Info("failed to process delivery", slog.String("delivery_id", delivery.ID.String()), slog.Int("status_code", code), slog.Int("attempt", delivery.Attempts))
@@ -133,7 +148,7 @@ func (w *Worker) process(ctx context.Context, delivery domain.PendingDelivery) {
 	}
 
 	if command.Status == domain.StatusFailed {
-		w.metrics.IncFailed()
+		w.metrics.IncCompletionFailed()
 	}
 }
 

@@ -12,6 +12,7 @@ package workers
 import (
 	context "context"
 	reflect "reflect"
+	time "time"
 	dto "webhook-delivery/internal/domain/dto"
 
 	gomock "go.uber.org/mock/gomock"
@@ -79,50 +80,74 @@ func (m *MockMetrics) EXPECT() *MockMetricsMockRecorder {
 	return m.recorder
 }
 
-// DecQueueSize mocks base method.
-func (m *MockMetrics) DecQueueSize() {
+// IncAttemptHttpError mocks base method.
+func (m *MockMetrics) IncAttemptHttpError() {
 	m.ctrl.T.Helper()
-	m.ctrl.Call(m, "DecQueueSize")
+	m.ctrl.Call(m, "IncAttemptHttpError")
 }
 
-// DecQueueSize indicates an expected call of DecQueueSize.
-func (mr *MockMetricsMockRecorder) DecQueueSize() *gomock.Call {
+// IncAttemptHttpError indicates an expected call of IncAttemptHttpError.
+func (mr *MockMetricsMockRecorder) IncAttemptHttpError() *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "DecQueueSize", reflect.TypeOf((*MockMetrics)(nil).DecQueueSize))
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "IncAttemptHttpError", reflect.TypeOf((*MockMetrics)(nil).IncAttemptHttpError))
 }
 
-// IncDelivered mocks base method.
-func (m *MockMetrics) IncDelivered() {
+// IncAttemptNoResponse mocks base method.
+func (m *MockMetrics) IncAttemptNoResponse() {
 	m.ctrl.T.Helper()
-	m.ctrl.Call(m, "IncDelivered")
+	m.ctrl.Call(m, "IncAttemptNoResponse")
 }
 
-// IncDelivered indicates an expected call of IncDelivered.
-func (mr *MockMetricsMockRecorder) IncDelivered() *gomock.Call {
+// IncAttemptNoResponse indicates an expected call of IncAttemptNoResponse.
+func (mr *MockMetricsMockRecorder) IncAttemptNoResponse() *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "IncDelivered", reflect.TypeOf((*MockMetrics)(nil).IncDelivered))
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "IncAttemptNoResponse", reflect.TypeOf((*MockMetrics)(nil).IncAttemptNoResponse))
 }
 
-// IncFailed mocks base method.
-func (m *MockMetrics) IncFailed() {
+// IncAttemptSuccess mocks base method.
+func (m *MockMetrics) IncAttemptSuccess() {
 	m.ctrl.T.Helper()
-	m.ctrl.Call(m, "IncFailed")
+	m.ctrl.Call(m, "IncAttemptSuccess")
 }
 
-// IncFailed indicates an expected call of IncFailed.
-func (mr *MockMetricsMockRecorder) IncFailed() *gomock.Call {
+// IncAttemptSuccess indicates an expected call of IncAttemptSuccess.
+func (mr *MockMetricsMockRecorder) IncAttemptSuccess() *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "IncFailed", reflect.TypeOf((*MockMetrics)(nil).IncFailed))
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "IncAttemptSuccess", reflect.TypeOf((*MockMetrics)(nil).IncAttemptSuccess))
 }
 
-// IncQueueSize mocks base method.
-func (m *MockMetrics) IncQueueSize() {
+// IncCompletionDelivered mocks base method.
+func (m *MockMetrics) IncCompletionDelivered() {
 	m.ctrl.T.Helper()
-	m.ctrl.Call(m, "IncQueueSize")
+	m.ctrl.Call(m, "IncCompletionDelivered")
 }
 
-// IncQueueSize indicates an expected call of IncQueueSize.
-func (mr *MockMetricsMockRecorder) IncQueueSize() *gomock.Call {
+// IncCompletionDelivered indicates an expected call of IncCompletionDelivered.
+func (mr *MockMetricsMockRecorder) IncCompletionDelivered() *gomock.Call {
 	mr.mock.ctrl.T.Helper()
-	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "IncQueueSize", reflect.TypeOf((*MockMetrics)(nil).IncQueueSize))
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "IncCompletionDelivered", reflect.TypeOf((*MockMetrics)(nil).IncCompletionDelivered))
+}
+
+// IncCompletionFailed mocks base method.
+func (m *MockMetrics) IncCompletionFailed() {
+	m.ctrl.T.Helper()
+	m.ctrl.Call(m, "IncCompletionFailed")
+}
+
+// IncCompletionFailed indicates an expected call of IncCompletionFailed.
+func (mr *MockMetricsMockRecorder) IncCompletionFailed() *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "IncCompletionFailed", reflect.TypeOf((*MockMetrics)(nil).IncCompletionFailed))
+}
+
+// ObserveAttemptDuration mocks base method.
+func (m *MockMetrics) ObserveAttemptDuration(elapsed time.Duration) {
+	m.ctrl.T.Helper()
+	m.ctrl.Call(m, "ObserveAttemptDuration", elapsed)
+}
+
+// ObserveAttemptDuration indicates an expected call of ObserveAttemptDuration.
+func (mr *MockMetricsMockRecorder) ObserveAttemptDuration(elapsed any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ObserveAttemptDuration", reflect.TypeOf((*MockMetrics)(nil).ObserveAttemptDuration), elapsed)
 }
