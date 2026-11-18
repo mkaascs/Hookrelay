@@ -53,6 +53,8 @@ func New(log *slog.Logger, cfg config.Config) *App {
 	worker := workers.NewWorkers(deliveryRepo, metrics, cfg.Workers, log)
 	dispatcher := workers.NewDispatcher(worker, deliveryRepo, cfg.Dispatcher, log)
 
+	metrics.RegisterQueueDepth(worker.Depth)
+
 	handler := rest.NewHandler(rest.Services{
 		Deliveries:    deliveries.NewService(deliveryRepo, dispatcher, log),
 		Endpoints:     endpoints.NewService(endpointRepo, log),

@@ -291,15 +291,16 @@ func Test_backoff(t *testing.T) {
 }
 
 func Test_EnqueueAndFreeSlots(t *testing.T) {
-	worker, _, metrics := newTestWorker(t, testWorkersConfig())
+	worker, _, _ := newTestWorker(t, testWorkersConfig())
+	require.Zero(t, worker.Depth())
 	require.Equal(t, 2, worker.FreeSlots())
 
-	metrics.EXPECT().IncQueueSize().Return()
 	worker.Enqueue(newPendingDelivery("http://example.com", 0))
+	require.Equal(t, 1, worker.Depth())
 	require.Equal(t, 1, worker.FreeSlots())
 
-	metrics.EXPECT().IncQueueSize().Return()
 	worker.Enqueue(newPendingDelivery("http://example.com", 0))
+	require.Equal(t, 2, worker.Depth())
 	require.Zero(t, worker.FreeSlots())
 }
 
@@ -320,8 +321,6 @@ func Test_Run(t *testing.T) {
 		})
 
 	metrics.EXPECT().IncDelivered().Return()
-	metrics.EXPECT().DecQueueSize().Return()
-	metrics.EXPECT().IncQueueSize().Return()
 
 	ctx, cancel := context.WithCancel(context.Background())
 	done := make(chan struct{})
@@ -338,6 +337,7 @@ func Test_Run(t *testing.T) {
 	case <-time.After(5 * time.Second):
 		t.Fatal("queued delivery was not processed")
 	}
+	require.Zero(t, worker.Depth())
 
 	cancel()
 

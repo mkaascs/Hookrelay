@@ -5,8 +5,8 @@ import (
 )
 
 type Prometheus struct {
+	queueDepth                 prometheus.GaugeFunc
 	deliveriesCompletionsTotal *prometheus.CounterVec
-	queueSize                  prometheus.Gauge
 }
 
 func New() *Prometheus {
@@ -15,16 +15,21 @@ func New() *Prometheus {
 		Help: "The total number of deliveries",
 	}, []string{"result"})
 
-	queueSize := prometheus.NewGauge(prometheus.GaugeOpts{
-		Name: "queue_size",
-		Help: "Current size of deliveries queue",
-	})
-
 	prometheus.MustRegister(deliveriesTotal)
 	return &Prometheus{
 		deliveriesCompletionsTotal: deliveriesTotal,
-		queueSize: queueSize,
 	}
+}
+
+func (p *Prometheus) RegisterQueueDepth(depth func() int) {
+	p.queueDepth = prometheus.NewGaugeFunc(prometheus.GaugeOpts{
+		Name: "delivery_worker_queue_depth",
+		Help: "Number of deliveries waiting in the worker queue",
+	}, func() float64 {
+		return float64(depth())
+	})
+
+	prometheus.MustRegister(p.queueDepth)
 }
 
 func (p *Prometheus) IncDelivered() {
@@ -33,12 +38,4 @@ func (p *Prometheus) IncDelivered() {
 
 func (p *Prometheus) IncFailed() {
 	p.deliveriesCompletionsTotal.WithLabelValues("failed").Inc()
-}
-
-func (p *Prometheus) IncQueueSize() {
-	p.queueSize.Inc()
-}
-
-func (p *Prometheus) DecQueueSize() {
-	p.queueSize.Dec()
 }
