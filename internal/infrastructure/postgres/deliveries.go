@@ -1,4 +1,4 @@
-package pg
+package postgres
 
 import (
 	"context"
@@ -68,15 +68,15 @@ func (d *Deliveries) ClaimPending(ctx context.Context, limit int) ([]domain.Pend
 	return results, nil
 }
 
-func (d *Deliveries) RecoverProcessing(ctx context.Context) error {
+func (d *Deliveries) RecoverProcessing(ctx context.Context) (int64, error) {
 	const fn = "infrastructure.pg.Deliveries.RecoverProcessing"
 
-	_, err := d.pool.Exec(ctx, `UPDATE deliveries SET status = 'pending' WHERE status IN ('queued', 'processing')`)
+	result, err := d.pool.Exec(ctx, `UPDATE deliveries SET status = 'pending' WHERE status IN ('queued', 'processing')`)
 	if err != nil {
-		return fmt.Errorf("%s: %w", fn, err)
+		return 0, fmt.Errorf("%s: %w", fn, err)
 	}
 
-	return nil
+	return result.RowsAffected(), nil
 }
 
 func (d *Deliveries) UpdateStatus(ctx context.Context, command dto.UpdateDeliveryStatusCommand) error {

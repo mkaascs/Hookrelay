@@ -18,15 +18,33 @@ import (
 	"webhook-delivery/internal/domain"
 	"webhook-delivery/internal/domain/dto"
 	sloglib "webhook-delivery/internal/lib/logging/slog"
+
+	"github.com/google/uuid"
 )
 
 type DeliveryRepo interface {
 	UpdateStatus(ctx context.Context, command dto.UpdateDeliveryStatusCommand) error
 }
 
+type Metrics interface {
+	IncCompletionFailed()
+	IncCompletionDelivered()
+	IncAttemptSuccess()
+	IncAttemptHttpError()
+	IncAttemptNoResponse()
+	ObserveAttemptDuration(elapsed time.Duration)
+}
+
+type Tracing interface {
+	StartDeliveryAttempt(ctx context.Context, deliveryID uuid.UUID, attempt int) (context.Context, func(code int, err error))
+	StartWebhookSend(ctx context.Context) (context.Context, func(code int, err error))
+}
+
 type Worker struct {
 	httpClient   *http.Client
 	deliveryRepo DeliveryRepo
+	metrics      Metrics
+	tracing      Tracing
 
 	log *slog.Logger
 	cfg config.Workers
@@ -35,10 +53,12 @@ type Worker struct {
 	queue chan domain.PendingDelivery
 }
 
-func NewWorkers(repo DeliveryRepo, cfg config.Workers, log *slog.Logger) *Worker {
+func NewWorkers(repo DeliveryRepo, metrics Metrics, tracing Tracing, cfg config.Workers, log *slog.Logger) *Worker {
 	return &Worker{
 		httpClient:   &http.Client{Timeout: cfg.Timeout},
 		deliveryRepo: repo,
+		metrics:      metrics,
+		tracing:      tracing,
 		log:          log,
 		cfg:          cfg,
 		wg:           sync.WaitGroup{},
@@ -68,7 +88,11 @@ func (w *Worker) Enqueue(delivery domain.PendingDelivery) {
 }
 
 func (w *Worker) FreeSlots() int {
-	return cap(w.queue) - len(w.queue)
+	return cap(w.queue) - w.Depth()
+}
+
+func (w *Worker) Depth() int {
+	return len(w.queue)
 }
 
 func (w *Worker) process(ctx context.Context, delivery domain.PendingDelivery) {
@@ -77,14 +101,25 @@ func (w *Worker) process(ctx context.Context, delivery domain.PendingDelivery) {
 
 	delivery.Attempts++
 
-	code, msg, err := w.sendPostRequest(ctx, delivery.URL, delivery.Payload, []byte(delivery.Secret))
-	if err != nil {
-		log.Warn("failed to send post request", slog.String("delivery_id", delivery.ID.String()), sloglib.Error(err))
+	attemptCtx, finishAttempt := w.tracing.StartDeliveryAttempt(ctx, delivery.ID, delivery.Attempts)
+	sendCtx, finishSend := w.tracing.StartWebhookSend(attemptCtx)
+
+	started := time.Now()
+	code, msg, attemptErr := w.sendPostRequest(sendCtx, delivery.URL, delivery.Payload, []byte(delivery.Secret))
+	w.metrics.ObserveAttemptDuration(time.Since(started))
+
+	finishSend(code, attemptErr)
+	defer func() { finishAttempt(code, attemptErr) }()
+
+	if attemptErr != nil {
+		log.Warn("failed to send post request", slog.String("delivery_id", delivery.ID.String()), sloglib.Error(attemptErr))
 	}
 
 	if isSuccessCode(code) {
 		log.Info("successfully processed delivery", slog.String("delivery_id", delivery.ID.String()))
-		err := w.deliveryRepo.UpdateStatus(ctx, dto.UpdateDeliveryStatusCommand{
+		w.metrics.IncAttemptSuccess()
+
+		err := w.deliveryRepo.UpdateStatus(attemptCtx, dto.UpdateDeliveryStatusCommand{
 			ID:          delivery.ID,
 			Status:      domain.StatusDelivered,
 			Attempts:    delivery.Attempts,
@@ -92,10 +127,19 @@ func (w *Worker) process(ctx context.Context, delivery domain.PendingDelivery) {
 		})
 
 		if err != nil {
+			attemptErr = err
 			log.Warn("failed to update delivery", slog.String("delivery_id", delivery.ID.String()), sloglib.Error(err))
+			return
 		}
 
+		w.metrics.IncCompletionDelivered()
 		return
+	}
+
+	if code == 0 {
+		w.metrics.IncAttemptNoResponse()
+	} else {
+		w.metrics.IncAttemptHttpError()
 	}
 
 	log.Info("failed to process delivery", slog.String("delivery_id", delivery.ID.String()), slog.Int("status_code", code), slog.Int("attempt", delivery.Attempts))
@@ -114,8 +158,14 @@ func (w *Worker) process(ctx context.Context, delivery domain.PendingDelivery) {
 		command.NextRetryAt = time.Now().Add(w.backoff(delivery.Attempts))
 	}
 
-	if err := w.deliveryRepo.UpdateStatus(ctx, command); err != nil {
+	if err := w.deliveryRepo.UpdateStatus(attemptCtx, command); err != nil {
+		attemptErr = err
 		log.Warn("failed to update delivery", slog.String("delivery_id", delivery.ID.String()), sloglib.Error(err))
+		return
+	}
+
+	if command.Status == domain.StatusFailed {
+		w.metrics.IncCompletionFailed()
 	}
 }
 

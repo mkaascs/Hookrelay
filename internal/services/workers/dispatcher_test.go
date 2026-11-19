@@ -86,7 +86,7 @@ func Test_dispatch(t *testing.T) {
 func Test_Recover(t *testing.T) {
 	t.Run("success", func(t *testing.T) {
 		dispatcher, _, repo := newTestDispatcher(t, config.Dispatcher{})
-		repo.EXPECT().RecoverProcessing(gomock.Any()).Return(nil)
+		repo.EXPECT().RecoverProcessing(gomock.Any()).Return(int64(1), nil)
 
 		require.NoError(t, dispatcher.Recover(context.Background()))
 	})
@@ -94,7 +94,7 @@ func Test_Recover(t *testing.T) {
 	t.Run("error is wrapped", func(t *testing.T) {
 		dispatcher, _, repo := newTestDispatcher(t, config.Dispatcher{})
 		repoErr := errors.New("db down")
-		repo.EXPECT().RecoverProcessing(gomock.Any()).Return(repoErr)
+		repo.EXPECT().RecoverProcessing(gomock.Any()).Return(int64(0), repoErr)
 
 		require.ErrorIs(t, dispatcher.Recover(context.Background()), repoErr)
 	})

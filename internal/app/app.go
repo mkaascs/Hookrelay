@@ -10,7 +10,9 @@ import (
 	"webhook-delivery/internal/app/server"
 	"webhook-delivery/internal/config"
 	"webhook-delivery/internal/delivery/rest"
-	pgRepo "webhook-delivery/internal/infrastructure/pg"
+	pgRepo "webhook-delivery/internal/infrastructure/postgres"
+	"webhook-delivery/internal/infrastructure/prometheus"
+	"webhook-delivery/internal/infrastructure/telemetry"
 	sloglib "webhook-delivery/internal/lib/logging/slog"
 	"webhook-delivery/internal/services/deliveries"
 	"webhook-delivery/internal/services/endpoints"
@@ -25,6 +27,8 @@ type App struct {
 
 	workers    *workers.Worker
 	dispatcher *workers.Dispatcher
+	workerDone chan struct{}
+	telemetry  *telemetry.Telemetry
 
 	log *slog.Logger
 	cfg config.Config
@@ -34,7 +38,13 @@ type App struct {
 }
 
 func New(log *slog.Logger, cfg config.Config) *App {
-	postgresApp, err := postgres.New(log, cfg.DB)
+	tracing, err := telemetry.New(context.Background(), cfg.TracingEndpoint)
+	if err != nil {
+		log.Error("failed to configure tracing", sloglib.Error(err))
+		os.Exit(1)
+	}
+
+	postgresApp, err := postgres.New(log, cfg.DB, tracing.PostgresTracer())
 	if err != nil {
 		os.Exit(1)
 	}
@@ -42,13 +52,17 @@ func New(log *slog.Logger, cfg config.Config) *App {
 	postgresApp.MustConnect()
 	postgres.MustMigrate(log, cfg.DB)
 
+	metrics := prometheus.New()
+
 	eventRepo := pgRepo.NewEvents(postgresApp.Pool, log, cfg.MaxAttempts)
 	endpointRepo := pgRepo.NewEndpoints(postgresApp.Pool, log)
 	deliveryRepo := pgRepo.NewDeliveries(postgresApp.Pool, log)
 	subscriptionRepo := pgRepo.NewSubscriptions(postgresApp.Pool, log)
 
-	worker := workers.NewWorkers(deliveryRepo, cfg.Workers, log)
+	worker := workers.NewWorkers(deliveryRepo, metrics, tracing, cfg.Workers, log)
 	dispatcher := workers.NewDispatcher(worker, deliveryRepo, cfg.Dispatcher, log)
+
+	metrics.RegisterQueueDepth(worker.Depth)
 
 	handler := rest.NewHandler(rest.Services{
 		Deliveries:    deliveries.NewService(deliveryRepo, dispatcher, log),
@@ -60,10 +74,12 @@ func New(log *slog.Logger, cfg config.Config) *App {
 	ctx, cancel := context.WithCancel(context.Background())
 
 	return &App{
-		Server:     server.New(handler, cfg, log),
+		Server:     server.New(handler, cfg, log, tracing.HTTPMiddleware),
 		Postgres:   postgresApp,
 		workers:    worker,
 		dispatcher: dispatcher,
+		workerDone: make(chan struct{}),
+		telemetry:  tracing,
 		log:        log,
 		cfg:        cfg,
 		ctx:        ctx,
@@ -80,7 +96,10 @@ func (a *App) MustRun() {
 		os.Exit(1)
 	}
 
-	go a.workers.Run(a.ctx)
+	go func() {
+		defer close(a.workerDone)
+		a.workers.Run(a.ctx)
+	}()
 	go a.dispatcher.Run(a.ctx)
 
 	log.Info("workers and dispatcher is running", slog.Int("workers_count", a.cfg.MaxGoroutines))
@@ -97,6 +116,16 @@ func (a *App) Shutdown(ctx context.Context) {
 
 	if err := a.Server.Shutdown(ctx); err != nil {
 		a.log.Error("failed to shutdown http server", sloglib.Error(err))
+	}
+
+	select {
+	case <-a.workerDone:
+	case <-ctx.Done():
+		a.log.Warn("failed to wait for workers to stop", sloglib.Error(ctx.Err()))
+	}
+
+	if err := a.telemetry.Shutdown(ctx); err != nil {
+		a.log.Error("failed to shutdown tracing", sloglib.Error(err))
 	}
 
 	a.Postgres.Close()

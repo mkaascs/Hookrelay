@@ -8,6 +8,7 @@ import (
 	"webhook-delivery/internal/config"
 	sloglib "webhook-delivery/internal/lib/logging/slog"
 
+	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 )
 
@@ -18,16 +19,22 @@ type App struct {
 	cfg config.DB
 }
 
-func New(log *slog.Logger, cfg config.DB) (*App, error) {
+func New(log *slog.Logger, cfg config.DB, queryTracer pgx.QueryTracer) (*App, error) {
 	const fn = "app.pg.App.New"
 	log = log.With(slog.String("fn", fn))
 
 	connectionString := GetConnectionString(cfg)
+	poolConfig, err := pgxpool.ParseConfig(connectionString)
+	if err != nil {
+		log.Error("failed to parse pgx pool configuration", sloglib.Error(err))
+		return nil, fmt.Errorf("%s: failed to parse pgx pool configuration: %w", fn, err)
+	}
+	poolConfig.ConnConfig.Tracer = queryTracer
 
 	ctx, cancel := context.WithTimeout(context.Background(), cfg.ConnectionTimeout)
 	defer cancel()
 
-	pool, err := pgxpool.New(ctx, connectionString)
+	pool, err := pgxpool.NewWithConfig(ctx, poolConfig)
 	if err != nil {
 		log.Error("failed to create pgx pool", sloglib.Error(err))
 		return nil, fmt.Errorf("%s: failed to create pgx pool: %w", fn, err)
