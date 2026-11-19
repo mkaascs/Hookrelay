@@ -24,9 +24,19 @@ type DeliveryRepo interface {
 	UpdateStatus(ctx context.Context, command dto.UpdateDeliveryStatusCommand) error
 }
 
+type Metrics interface {
+	IncCompletionFailed()
+	IncCompletionDelivered()
+	IncAttemptSuccess()
+	IncAttemptHttpError()
+	IncAttemptNoResponse()
+	ObserveAttemptDuration(elapsed time.Duration)
+}
+
 type Worker struct {
 	httpClient   *http.Client
 	deliveryRepo DeliveryRepo
+	metrics      Metrics
 
 	log *slog.Logger
 	cfg config.Workers
@@ -35,10 +45,11 @@ type Worker struct {
 	queue chan domain.PendingDelivery
 }
 
-func NewWorkers(repo DeliveryRepo, cfg config.Workers, log *slog.Logger) *Worker {
+func NewWorkers(repo DeliveryRepo, metrics Metrics, cfg config.Workers, log *slog.Logger) *Worker {
 	return &Worker{
 		httpClient:   &http.Client{Timeout: cfg.Timeout},
 		deliveryRepo: repo,
+		metrics:      metrics,
 		log:          log,
 		cfg:          cfg,
 		wg:           sync.WaitGroup{},
@@ -68,7 +79,11 @@ func (w *Worker) Enqueue(delivery domain.PendingDelivery) {
 }
 
 func (w *Worker) FreeSlots() int {
-	return cap(w.queue) - len(w.queue)
+	return cap(w.queue) - w.Depth()
+}
+
+func (w *Worker) Depth() int {
+	return len(w.queue)
 }
 
 func (w *Worker) process(ctx context.Context, delivery domain.PendingDelivery) {
@@ -77,13 +92,18 @@ func (w *Worker) process(ctx context.Context, delivery domain.PendingDelivery) {
 
 	delivery.Attempts++
 
+	started := time.Now()
 	code, msg, err := w.sendPostRequest(ctx, delivery.URL, delivery.Payload, []byte(delivery.Secret))
+	w.metrics.ObserveAttemptDuration(time.Since(started))
+
 	if err != nil {
 		log.Warn("failed to send post request", slog.String("delivery_id", delivery.ID.String()), sloglib.Error(err))
 	}
 
 	if isSuccessCode(code) {
 		log.Info("successfully processed delivery", slog.String("delivery_id", delivery.ID.String()))
+		w.metrics.IncAttemptSuccess()
+
 		err := w.deliveryRepo.UpdateStatus(ctx, dto.UpdateDeliveryStatusCommand{
 			ID:          delivery.ID,
 			Status:      domain.StatusDelivered,
@@ -93,9 +113,17 @@ func (w *Worker) process(ctx context.Context, delivery domain.PendingDelivery) {
 
 		if err != nil {
 			log.Warn("failed to update delivery", slog.String("delivery_id", delivery.ID.String()), sloglib.Error(err))
+			return
 		}
 
+		w.metrics.IncCompletionDelivered()
 		return
+	}
+
+	if code == 0 {
+		w.metrics.IncAttemptNoResponse()
+	} else {
+		w.metrics.IncAttemptHttpError()
 	}
 
 	log.Info("failed to process delivery", slog.String("delivery_id", delivery.ID.String()), slog.Int("status_code", code), slog.Int("attempt", delivery.Attempts))
@@ -116,6 +144,11 @@ func (w *Worker) process(ctx context.Context, delivery domain.PendingDelivery) {
 
 	if err := w.deliveryRepo.UpdateStatus(ctx, command); err != nil {
 		log.Warn("failed to update delivery", slog.String("delivery_id", delivery.ID.String()), sloglib.Error(err))
+		return
+	}
+
+	if command.Status == domain.StatusFailed {
+		w.metrics.IncCompletionFailed()
 	}
 }
 

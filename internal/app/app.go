@@ -10,7 +10,8 @@ import (
 	"webhook-delivery/internal/app/server"
 	"webhook-delivery/internal/config"
 	"webhook-delivery/internal/delivery/rest"
-	pgRepo "webhook-delivery/internal/infrastructure/pg"
+	pgRepo "webhook-delivery/internal/infrastructure/postgres"
+	"webhook-delivery/internal/infrastructure/prometheus"
 	sloglib "webhook-delivery/internal/lib/logging/slog"
 	"webhook-delivery/internal/services/deliveries"
 	"webhook-delivery/internal/services/endpoints"
@@ -42,13 +43,17 @@ func New(log *slog.Logger, cfg config.Config) *App {
 	postgresApp.MustConnect()
 	postgres.MustMigrate(log, cfg.DB)
 
+	metrics := prometheus.New()
+
 	eventRepo := pgRepo.NewEvents(postgresApp.Pool, log, cfg.MaxAttempts)
 	endpointRepo := pgRepo.NewEndpoints(postgresApp.Pool, log)
 	deliveryRepo := pgRepo.NewDeliveries(postgresApp.Pool, log)
 	subscriptionRepo := pgRepo.NewSubscriptions(postgresApp.Pool, log)
 
-	worker := workers.NewWorkers(deliveryRepo, cfg.Workers, log)
+	worker := workers.NewWorkers(deliveryRepo, metrics, cfg.Workers, log)
 	dispatcher := workers.NewDispatcher(worker, deliveryRepo, cfg.Dispatcher, log)
+
+	metrics.RegisterQueueDepth(worker.Depth)
 
 	handler := rest.NewHandler(rest.Services{
 		Deliveries:    deliveries.NewService(deliveryRepo, dispatcher, log),

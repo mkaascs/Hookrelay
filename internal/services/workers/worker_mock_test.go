@@ -12,6 +12,7 @@ package workers
 import (
 	context "context"
 	reflect "reflect"
+	time "time"
 	dto "webhook-delivery/internal/domain/dto"
 
 	gomock "go.uber.org/mock/gomock"
@@ -53,4 +54,100 @@ func (m *MockDeliveryRepo) UpdateStatus(ctx context.Context, command dto.UpdateD
 func (mr *MockDeliveryRepoMockRecorder) UpdateStatus(ctx, command any) *gomock.Call {
 	mr.mock.ctrl.T.Helper()
 	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "UpdateStatus", reflect.TypeOf((*MockDeliveryRepo)(nil).UpdateStatus), ctx, command)
+}
+
+// MockMetrics is a mock of Metrics interface.
+type MockMetrics struct {
+	ctrl     *gomock.Controller
+	recorder *MockMetricsMockRecorder
+	isgomock struct{}
+}
+
+// MockMetricsMockRecorder is the mock recorder for MockMetrics.
+type MockMetricsMockRecorder struct {
+	mock *MockMetrics
+}
+
+// NewMockMetrics creates a new mock instance.
+func NewMockMetrics(ctrl *gomock.Controller) *MockMetrics {
+	mock := &MockMetrics{ctrl: ctrl}
+	mock.recorder = &MockMetricsMockRecorder{mock}
+	return mock
+}
+
+// EXPECT returns an object that allows the caller to indicate expected use.
+func (m *MockMetrics) EXPECT() *MockMetricsMockRecorder {
+	return m.recorder
+}
+
+// IncAttemptHttpError mocks base method.
+func (m *MockMetrics) IncAttemptHttpError() {
+	m.ctrl.T.Helper()
+	m.ctrl.Call(m, "IncAttemptHttpError")
+}
+
+// IncAttemptHttpError indicates an expected call of IncAttemptHttpError.
+func (mr *MockMetricsMockRecorder) IncAttemptHttpError() *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "IncAttemptHttpError", reflect.TypeOf((*MockMetrics)(nil).IncAttemptHttpError))
+}
+
+// IncAttemptNoResponse mocks base method.
+func (m *MockMetrics) IncAttemptNoResponse() {
+	m.ctrl.T.Helper()
+	m.ctrl.Call(m, "IncAttemptNoResponse")
+}
+
+// IncAttemptNoResponse indicates an expected call of IncAttemptNoResponse.
+func (mr *MockMetricsMockRecorder) IncAttemptNoResponse() *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "IncAttemptNoResponse", reflect.TypeOf((*MockMetrics)(nil).IncAttemptNoResponse))
+}
+
+// IncAttemptSuccess mocks base method.
+func (m *MockMetrics) IncAttemptSuccess() {
+	m.ctrl.T.Helper()
+	m.ctrl.Call(m, "IncAttemptSuccess")
+}
+
+// IncAttemptSuccess indicates an expected call of IncAttemptSuccess.
+func (mr *MockMetricsMockRecorder) IncAttemptSuccess() *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "IncAttemptSuccess", reflect.TypeOf((*MockMetrics)(nil).IncAttemptSuccess))
+}
+
+// IncCompletionDelivered mocks base method.
+func (m *MockMetrics) IncCompletionDelivered() {
+	m.ctrl.T.Helper()
+	m.ctrl.Call(m, "IncCompletionDelivered")
+}
+
+// IncCompletionDelivered indicates an expected call of IncCompletionDelivered.
+func (mr *MockMetricsMockRecorder) IncCompletionDelivered() *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "IncCompletionDelivered", reflect.TypeOf((*MockMetrics)(nil).IncCompletionDelivered))
+}
+
+// IncCompletionFailed mocks base method.
+func (m *MockMetrics) IncCompletionFailed() {
+	m.ctrl.T.Helper()
+	m.ctrl.Call(m, "IncCompletionFailed")
+}
+
+// IncCompletionFailed indicates an expected call of IncCompletionFailed.
+func (mr *MockMetricsMockRecorder) IncCompletionFailed() *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "IncCompletionFailed", reflect.TypeOf((*MockMetrics)(nil).IncCompletionFailed))
+}
+
+// ObserveAttemptDuration mocks base method.
+func (m *MockMetrics) ObserveAttemptDuration(elapsed time.Duration) {
+	m.ctrl.T.Helper()
+	m.ctrl.Call(m, "ObserveAttemptDuration", elapsed)
+}
+
+// ObserveAttemptDuration indicates an expected call of ObserveAttemptDuration.
+func (mr *MockMetricsMockRecorder) ObserveAttemptDuration(elapsed any) *gomock.Call {
+	mr.mock.ctrl.T.Helper()
+	return mr.mock.ctrl.RecordCallWithMethodType(mr.mock, "ObserveAttemptDuration", reflect.TypeOf((*MockMetrics)(nil).ObserveAttemptDuration), elapsed)
 }

@@ -18,6 +18,7 @@ import (
 	"github.com/go-chi/chi/v5"
 	"github.com/go-chi/chi/v5/middleware"
 	nethttpmiddleware "github.com/oapi-codegen/nethttp-middleware"
+	"github.com/prometheus/client_golang/prometheus/promhttp"
 	"github.com/swaggest/swgui/v5emb"
 )
 
@@ -37,6 +38,10 @@ func New(handlers apiv1.ServerInterface, cfg config.Config, log *slog.Logger) *S
 	router.Use(middlewares.NewLogger(log))
 
 	if cfg.Env != config.EnvProd {
+		metricsHandler := promhttp.Handler()
+		router.Method(http.MethodGet, "/metrics", metricsHandler)
+		router.Method(http.MethodGet, "/metrics/", metricsHandler)
+
 		router.Get("/swagger/openapi.json", newSpecHandler(spec))
 		router.Mount("/swagger", v5emb.New(
 			"Webhook Delivery",
