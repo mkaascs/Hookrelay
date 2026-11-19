@@ -1,9 +1,9 @@
-# Webhook Delivery
+# Hookrelay
 
-![CI](https://github.com/mkaascs/WebhookDelivery/actions/workflows/ci.yaml/badge.svg)
+![CI](https://github.com/mkaascs/Hookrelay/actions/workflows/ci.yaml/badge.svg)
 ![Go](https://img.shields.io/badge/Go-1.26+-00ADD8?logo=go)
 
-A reliable webhook delivery service. Applications register receiver endpoints, subscribe them to event types, and publish events — the service fans each event out to its subscribers and guarantees delivery over HTTP with retries, exponential backoff, and HMAC-signed requests. Every delivery attempt is tracked with its own status, retry schedule, and last response.
+Hookrelay is a reliable webhook delivery service. Applications register receiver endpoints, subscribe them to event types, and publish events — the service fans each event out to its subscribers and guarantees delivery over HTTP with retries, exponential backoff, and HMAC-signed requests. Every delivery attempt is tracked with its own status, retry schedule, and last response.
 
 This is the machinery behind the webhooks of services like Stripe or GitHub: the side that dispatches notifications to third-party URLs and takes on the dirty work of reliable delivery.
 
