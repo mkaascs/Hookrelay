@@ -25,16 +25,17 @@ This is the machinery behind the webhooks of services like Stripe or GitHub: the
 | `DB_PASSWORD` | Postgres password                                        | Yes      |
 | `DB_NAME`     | Postgres database name (`hookrelay` in Docker Compose)   | Yes      |
 | `API_KEY`     | Key expected in the `X-Api-Key` header; if empty, auth is skipped with a warning | No |
+| `GRAFANA_PASSWORD` | Initial password for the Grafana `admin` user        | Yes (Docker) |
 
 Copy `.env.example` to `.env` (loaded automatically) or provide the variables via the environment. For Docker use `config/dev.yaml` (its `db.addr` points at the `postgres` service); for host runs use `config/local.yaml` (`localhost`).
 
 ### Run with Docker
 
 ```bash
-docker-compose up --build
+CONFIG_PATH=config/dev.yaml docker compose up -d --build
 ```
 
-Brings up PostgreSQL and the service; migrations are applied automatically on startup. The API is exposed on `localhost:5428`, Swagger UI on `localhost:5428/swagger/`.
+Brings up PostgreSQL, the service, Prometheus, Tempo, and Grafana. The service applies migrations on startup. The API listens on `localhost:8080`, Swagger UI is at `localhost:8080/swagger/`, and Grafana is at `127.0.0.1:3000`.
 
 ### Run locally
 
@@ -77,6 +78,7 @@ curl localhost:8080/api/v1/events/ev_.../deliveries -H "X-Api-Key: $API_KEY"
 - **SSRF protection** — endpoint URLs are validated on registration and update; loopback, link-local and `localhost` targets are rejected
 - **Public prefixed IDs** — UUIDv7 primary keys in Postgres (index-friendly, time-ordered), exposed as `ep_…`, `sub_…`, `ev_…`, `del_…` in the API
 - **Postgres-backed queue** — no external broker; pending deliveries are claimed straight from Postgres via a partial index
+- **Observability** — structured logs, Prometheus delivery metrics, and OpenTelemetry traces for API requests and delivery attempts
 - **Graceful shutdown** — workers, the dispatcher and the HTTP server stop cleanly on `SIGINT` / `SIGTERM`
 
 ---
@@ -95,6 +97,9 @@ curl localhost:8080/api/v1/events/ev_.../deliveries -H "X-Api-Key: $API_KEY"
 | **Migrations**       | [golang-migrate](https://github.com/golang-migrate/migrate)                    |
 | **Config**           | [cleanenv](https://github.com/ilyakaznacheev/cleanenv) + godotenv (YAML + env) |
 | **Logging**          | slog (structured JSON / text)                                                  |
+| **Metrics**          | [Prometheus](https://prometheus.io/)                                           |
+| **Tracing**          | [OpenTelemetry](https://opentelemetry.io/) + [Tempo](https://grafana.com/oss/tempo/) |
+| **Visualization**    | [Grafana](https://grafana.com/oss/grafana/)                                    |
 | **Testing**          | testify + [uber-go/mock](https://github.com/uber-go/mock) + [testcontainers-go](https://github.com/testcontainers/testcontainers-go) |
 | **Containerization** | Docker + Docker Compose                                                        |
 
@@ -108,6 +113,7 @@ Layers with dependencies pointing inward, wired through interfaces declared on t
 - **`services`** — business logic; each service depends on repository interfaces, not concrete drivers
 - **`services/workers`** — the delivery pipeline: dispatcher and worker pool
 - **`infrastructure/pg`** — pgxpool repositories (one file per aggregate); transactions are opened where an operation needs them, e.g. publishing an event together with its deliveries
+- **`infrastructure/prometheus`** and **`infrastructure/telemetry`** — delivery metrics and trace instrumentation wired into the app
 - **`domain`** — entities, commands, error values and public ID prefixes, free of framework code
 - **`app`** — wiring: builds repositories, services, workers and the HTTP server, runs migrations on startup
 
@@ -229,6 +235,54 @@ if !hmac.Equal([]byte(expected), []byte(r.Header.Get("X-Webhook-Signature"))) {
 
 ---
 
+## Observability
+
+### Logs
+
+The service writes structured `slog` logs to stdout in text format for `local` and `dev` and JSON for `prod`. Request logs include the request ID, HTTP status, and duration. The dispatcher logs how many deliveries it recovers on startup.
+
+```bash
+docker compose logs -f hookrelay
+```
+
+### Metrics
+
+The service exposes `/metrics` in non-prod environments. In Compose, Prometheus scrapes `hookrelay:8080` every 5 seconds and stores its history in the `prometheus_data` volume. Counters reset when the service restarts, and Prometheus retains the samples it already scraped.
+
+| Metric | Type | Description |
+|--------|------|-------------|
+| `deliveries_attempts_total` | Counter | Individual webhook attempts by `result` (`success`, `http_error`, `no_response`) |
+| `deliveries_completions_total` | Counter | Deliveries that reach a terminal status by `result` (`delivered`, `failed`) |
+| `deliveries_attempt_duration_seconds` | Histogram | Duration of each outbound webhook attempt in seconds |
+| `delivery_worker_queue_depth` | Gauge | Deliveries currently waiting in the in-memory worker queue |
+
+```bash
+curl http://localhost:8080/metrics
+```
+
+To query metrics in Grafana, sign in as `admin` and add a Prometheus data source with the URL `http://prometheus:9090`. In Explore, query the per-second attempt rate by result.
+
+```promql
+sum by (result) (rate(deliveries_attempts_total[5m]))
+```
+
+### Tracing
+
+OpenTelemetry exports spans over OTLP/HTTP to Tempo. `config/dev.yaml` uses `http://tempo:4318/v1/traces`, and `config/local.yaml` disables tracing with `tracing_endpoint: "-"`. Tempo stores traces in the `tempo_data` volume. Compose provisions the Tempo data source in Grafana at `http://tempo:3200`, with both Tempo ports available on the internal Docker network.
+
+Publish an event using [Try it](#try-it) with a test endpoint you control. Select **Tempo** in Grafana **Explore**, choose the last 15 minutes, and run this TraceQL query.
+
+```traceql
+{ resource.service.name = "hookrelay" }
+```
+
+- **API request** — a span for the incoming `/api/v1` request with child spans for its PostgreSQL operations
+- **Delivery attempt** — a `delivery.attempt` span for each worker attempt, with `webhook.send` and a PostgreSQL status update as child spans
+
+The API request and worker attempts have separate trace IDs because the queue currently carries no trace context.
+
+---
+
 ## Testing
 
 - **Unit tests** — table tests for handlers, services and workers with generated mocks (`task mocks` regenerates them next to their sources)
@@ -259,6 +313,7 @@ Every push and pull request to `master` / `development` runs the **CI** workflow
 
 ```yaml
 env: "local" # local, dev, prod
+tracing_endpoint: "-"
 http_server:
   port: 8080
   write_timeout: 5s
@@ -278,7 +333,7 @@ dispatcher:
   batch_size: 20
 ```
 
-In `prod` Swagger UI is disabled.
+In `prod` Swagger UI and `/metrics` are disabled.
 
 ---
 
