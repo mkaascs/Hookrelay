@@ -126,17 +126,18 @@ func TestDeliveries_UpdateStatus_Success(t *testing.T) {
 	ctx := context.Background()
 	repo := NewDeliveries(pool, slog.New(slog.DiscardHandler))
 
+	now := time.Now().Truncate(time.Microsecond)
 	ep := insertEndpoint(t, url, "whsec")
-	del := insertDelivery(t, ep, "processing", time.Now().Add(-time.Minute))
+	del := insertDelivery(t, ep, "processing", now.Add(-time.Minute))
 
-	notAffectedTime := time.Now().Add(-time.Hour)
+	notAffectedTime := now.Add(-time.Hour)
 	notAffected := insertDelivery(t, ep, "failed", notAffectedTime)
 
 	cmd := dto.UpdateDeliveryStatusCommand{
 		ID:               del,
 		Status:           domain.StatusPending,
 		Attempts:         2,
-		NextRetryAt:      time.Now().Add(time.Minute),
+		NextRetryAt:      now.Add(time.Minute),
 		LastError:        new("test error"),
 		LastResponseCode: nil,
 	}
@@ -148,7 +149,7 @@ func TestDeliveries_UpdateStatus_Success(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, domain.StatusFailed, got.Status)
 	require.Equal(t, ep, got.EndpointID)
-	require.WithinDuration(t, notAffectedTime, got.NextRetryAt, time.Nanosecond)
+	require.WithinDuration(t, notAffectedTime, got.NextRetryAt, 0)
 
 	got, err = repo.GetByID(ctx, del)
 	require.NoError(t, err)
@@ -157,7 +158,7 @@ func TestDeliveries_UpdateStatus_Success(t *testing.T) {
 	require.Equal(t, ep, got.EndpointID)
 	require.Equal(t, cmd.Status, got.Status)
 	require.Equal(t, cmd.Attempts, got.Attempts)
-	require.WithinDuration(t, cmd.NextRetryAt, got.NextRetryAt, time.Nanosecond)
+	require.WithinDuration(t, cmd.NextRetryAt, got.NextRetryAt, 0)
 	require.Equal(t, cmd.LastError, got.LastError)
 	require.Equal(t, cmd.LastResponseCode, got.LastResponseCode)
 }
@@ -170,7 +171,7 @@ func TestDeliveries_UpdateStatus_NotFound(t *testing.T) {
 	repo := NewDeliveries(pool, slog.New(slog.DiscardHandler))
 
 	ep := insertEndpoint(t, url, "whsec")
-	delTime := time.Now().Add(-time.Hour)
+	delTime := time.Now().Add(-time.Hour).Truncate(time.Microsecond)
 	del := insertDelivery(t, ep, "failed", delTime)
 
 	cmd := dto.UpdateDeliveryStatusCommand{
@@ -187,7 +188,7 @@ func TestDeliveries_UpdateStatus_NotFound(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, domain.StatusFailed, got.Status)
 	require.Equal(t, ep, got.EndpointID)
-	require.WithinDuration(t, delTime, got.NextRetryAt, time.Nanosecond)
+	require.WithinDuration(t, delTime, got.NextRetryAt, 0)
 }
 
 func TestDeliveries_ClaimPending_OldestFirst(t *testing.T) {
