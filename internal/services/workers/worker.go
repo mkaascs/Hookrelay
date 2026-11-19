@@ -18,6 +18,8 @@ import (
 	"webhook-delivery/internal/domain"
 	"webhook-delivery/internal/domain/dto"
 	sloglib "webhook-delivery/internal/lib/logging/slog"
+
+	"github.com/google/uuid"
 )
 
 type DeliveryRepo interface {
@@ -33,10 +35,16 @@ type Metrics interface {
 	ObserveAttemptDuration(elapsed time.Duration)
 }
 
+type Tracing interface {
+	StartDeliveryAttempt(ctx context.Context, deliveryID uuid.UUID, attempt int) (context.Context, func(code int, err error))
+	StartWebhookSend(ctx context.Context) (context.Context, func(code int, err error))
+}
+
 type Worker struct {
 	httpClient   *http.Client
 	deliveryRepo DeliveryRepo
 	metrics      Metrics
+	tracing      Tracing
 
 	log *slog.Logger
 	cfg config.Workers
@@ -45,11 +53,12 @@ type Worker struct {
 	queue chan domain.PendingDelivery
 }
 
-func NewWorkers(repo DeliveryRepo, metrics Metrics, cfg config.Workers, log *slog.Logger) *Worker {
+func NewWorkers(repo DeliveryRepo, metrics Metrics, tracing Tracing, cfg config.Workers, log *slog.Logger) *Worker {
 	return &Worker{
 		httpClient:   &http.Client{Timeout: cfg.Timeout},
 		deliveryRepo: repo,
 		metrics:      metrics,
+		tracing:      tracing,
 		log:          log,
 		cfg:          cfg,
 		wg:           sync.WaitGroup{},
@@ -92,19 +101,25 @@ func (w *Worker) process(ctx context.Context, delivery domain.PendingDelivery) {
 
 	delivery.Attempts++
 
+	attemptCtx, finishAttempt := w.tracing.StartDeliveryAttempt(ctx, delivery.ID, delivery.Attempts)
+	sendCtx, finishSend := w.tracing.StartWebhookSend(attemptCtx)
+
 	started := time.Now()
-	code, msg, err := w.sendPostRequest(ctx, delivery.URL, delivery.Payload, []byte(delivery.Secret))
+	code, msg, attemptErr := w.sendPostRequest(sendCtx, delivery.URL, delivery.Payload, []byte(delivery.Secret))
 	w.metrics.ObserveAttemptDuration(time.Since(started))
 
-	if err != nil {
-		log.Warn("failed to send post request", slog.String("delivery_id", delivery.ID.String()), sloglib.Error(err))
+	finishSend(code, attemptErr)
+	defer func() { finishAttempt(code, attemptErr) }()
+
+	if attemptErr != nil {
+		log.Warn("failed to send post request", slog.String("delivery_id", delivery.ID.String()), sloglib.Error(attemptErr))
 	}
 
 	if isSuccessCode(code) {
 		log.Info("successfully processed delivery", slog.String("delivery_id", delivery.ID.String()))
 		w.metrics.IncAttemptSuccess()
 
-		err := w.deliveryRepo.UpdateStatus(ctx, dto.UpdateDeliveryStatusCommand{
+		err := w.deliveryRepo.UpdateStatus(attemptCtx, dto.UpdateDeliveryStatusCommand{
 			ID:          delivery.ID,
 			Status:      domain.StatusDelivered,
 			Attempts:    delivery.Attempts,
@@ -112,6 +127,7 @@ func (w *Worker) process(ctx context.Context, delivery domain.PendingDelivery) {
 		})
 
 		if err != nil {
+			attemptErr = err
 			log.Warn("failed to update delivery", slog.String("delivery_id", delivery.ID.String()), sloglib.Error(err))
 			return
 		}
@@ -142,7 +158,8 @@ func (w *Worker) process(ctx context.Context, delivery domain.PendingDelivery) {
 		command.NextRetryAt = time.Now().Add(w.backoff(delivery.Attempts))
 	}
 
-	if err := w.deliveryRepo.UpdateStatus(ctx, command); err != nil {
+	if err := w.deliveryRepo.UpdateStatus(attemptCtx, command); err != nil {
+		attemptErr = err
 		log.Warn("failed to update delivery", slog.String("delivery_id", delivery.ID.String()), sloglib.Error(err))
 		return
 	}

@@ -33,7 +33,17 @@ func newTestWorker(t *testing.T, cfg config.Workers) (*Worker, *MockDeliveryRepo
 	repo := NewMockDeliveryRepo(ctrl)
 	metrics := NewMockMetrics(ctrl)
 	log := slog.New(slog.NewTextHandler(io.Discard, nil))
-	return NewWorkers(repo, metrics, cfg, log), repo, metrics
+	return NewWorkers(repo, metrics, noopTracing{}, cfg, log), repo, metrics
+}
+
+type noopTracing struct{}
+
+func (noopTracing) StartDeliveryAttempt(ctx context.Context, _ uuid.UUID, _ int) (context.Context, func(int, error)) {
+	return ctx, func(int, error) {}
+}
+
+func (noopTracing) StartWebhookSend(ctx context.Context) (context.Context, func(int, error)) {
+	return ctx, func(int, error) {}
 }
 
 func testWorkersConfig() config.Workers {

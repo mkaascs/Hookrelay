@@ -17,11 +17,12 @@ const (
 )
 
 type Config struct {
-	Env        string `yaml:"env" default:"local"`
-	DB         `yaml:"db"`
-	HTTP       `yaml:"http_server"`
-	Workers    `yaml:"workers"`
-	Dispatcher `yaml:"dispatcher"`
+	Env             string `yaml:"env" default:"local"`
+	TracingEndpoint string `yaml:"tracing_endpoint"`
+	DB              `yaml:"db"`
+	HTTP            `yaml:"http_server"`
+	Workers         `yaml:"workers"`
+	Dispatcher      `yaml:"dispatcher"`
 }
 
 type HTTP struct {
@@ -39,12 +40,12 @@ type DB struct {
 }
 
 type Workers struct {
-	MaxGoroutines  int           `yaml:"max_goroutines" default:"5"`
-	MaxAttempts    int           `yaml:"max_attempts" default:"5"`
-	BaseBackoff    time.Duration `yaml:"base_backoff" default:"10s"`
-	MaxBackoff     time.Duration `yaml:"max_backoff" default:"1h"`
-	Timeout        time.Duration `yaml:"timeout" default:"10s"`
-	QueueSize      int           `yaml:"queue_size" default:"25"`
+	MaxGoroutines int           `yaml:"max_goroutines" default:"5"`
+	MaxAttempts   int           `yaml:"max_attempts" default:"5"`
+	BaseBackoff   time.Duration `yaml:"base_backoff" default:"10s"`
+	MaxBackoff    time.Duration `yaml:"max_backoff" default:"1h"`
+	Timeout       time.Duration `yaml:"timeout" default:"10s"`
+	QueueSize     int           `yaml:"queue_size" default:"25"`
 }
 
 type Dispatcher struct {

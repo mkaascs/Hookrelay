@@ -26,7 +26,7 @@ type Server struct {
 	http *http.Server
 }
 
-func New(handlers apiv1.ServerInterface, cfg config.Config, log *slog.Logger) *Server {
+func New(handlers apiv1.ServerInterface, cfg config.Config, log *slog.Logger, traceHTTP func(http.Handler) http.Handler) *Server {
 	spec, err := apiv1.GetSpec()
 	if err != nil {
 		log.Error("failed to get spec", sloglib.Error(err))
@@ -60,6 +60,7 @@ func New(handlers apiv1.ServerInterface, cfg config.Config, log *slog.Logger) *S
 
 	// group keeps the validator off the swagger routes and lets it be added after them
 	router.Group(func(r chi.Router) {
+		r.Use(traceHTTP)
 		r.Use(middlewares.NewAPIAuth(log))
 		r.Use(validator)
 		apiv1.HandlerFromMuxWithBaseURL(handlers, r, "/api/v1")
